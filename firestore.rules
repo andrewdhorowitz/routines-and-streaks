@@ -119,6 +119,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Error reports (error-reporting Phase 1, Step 1): clients — signed in
+    // or not — may only CREATE exact-shape events. Create is deliberately
+    // unauthenticated: the highest-value failures (sign-in dying) happen
+    // before any user exists, so the abuse surface is bounded by shape
+    // instead (exact keys, type checks, tier whitelist, fixed site tag).
+    // Events are immutable; only registry admins can read or delete them,
+    // and the app itself contains no read path for this collection.
+    match /error_reports/{reportId} {
+      allow get, list: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(
+            ['code','tier','area','operation','recovered','release','page','site','ts'])
+        && request.resource.data.code is string
+        && request.resource.data.tier in [0, 1, 2]
+        && request.resource.data.area is string
+        && request.resource.data.site == 'routines-and-streaks'
+        && request.resource.data.ts is number;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
