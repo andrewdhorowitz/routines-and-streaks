@@ -130,9 +130,17 @@ service cloud.firestore {
       allow get, list: if isAdmin();
       allow create: if request.resource.data.keys().hasOnly(
             ['code','tier','area','operation','recovered','release','page','site','ts'])
+        && request.resource.data.keys().hasAll(
+            ['code','tier','area','operation','recovered','release','page','site','ts'])
         && request.resource.data.code is string
         && request.resource.data.tier in [0, 1, 2]
         && request.resource.data.area is string
+        && (request.resource.data.operation is string
+            || request.resource.data.operation == null)
+        && (request.resource.data.recovered is bool
+            || request.resource.data.recovered == 'pending')
+        && request.resource.data.release is string
+        && request.resource.data.page is string
         && request.resource.data.site == 'routines-and-streaks'
         && request.resource.data.ts is number;
       allow update: if false;
