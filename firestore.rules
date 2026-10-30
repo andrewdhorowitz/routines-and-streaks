@@ -1,0 +1,126 @@
+// Family Routines App — Phase 1.1 restrictive Firestore rules (DRAFT for owner deployment)
+// Deploy order matters: FIRST create system_admins/<Andrew's Firebase UID> = { enabled: true }
+// in the Firebase Console, THEN publish these rules. Console/Admin SDK bypass rules, so the
+// registry is managed there only — no client can grant itself admin.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/system_admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/system_admins/$(request.auth.uid)).data.enabled == true;
+    }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Admin registry: a client may read only its own entry (so the UI can show/hide admin
+    // chrome). Nobody can create/update/delete entries from a client — use the Console.
+    match /system_admins/{uid} {
+      allow get: if isSelf(uid) || isAdmin();
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Private Section tier registry (the gated project index at
+    // private.andrewdhorowitz.com): one doc per allowlisted email,
+    // { tier: 'owner' | 'family', enabled: true }. A client may read only
+    // its own entry — the section's gate presents the visitor's own ID
+    // token to learn their tier. Nobody can write entries from a client;
+    // seats are managed in the Firebase Console or by Admin SDK script.
+    match /section_access/{email} {
+      allow get: if signedIn() && request.auth.token.email == email;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Private Section guest passes: minted only by the owner's Admin SDK
+    // script (scripts/mint-pass.mjs in the private-section repo) or the
+    // Console — no client writes. Bearer docs: the document ID is the
+    // SHA-256 of the link secret and the doc holds only scope / shelf /
+    // entry / expiry, so a GET is allowed for anyone who knows the ID
+    // (a capability — the ID is the hash of a 256-bit secret); listing
+    // stays denied, so the collection cannot be enumerated.
+    match /section_passes_bearer/{tokenHash} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Bound passes: readable only by the Google account named in the
+    // doc's boundEmail (the gate presents the visitor's own ID token).
+    match /section_passes_bound/{passId} {
+      allow get: if signedIn() && request.auth.token.email == resource.data.boundEmail;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Global config (default tasks + early buffer): any signed-in user may read it
+    // (provisioning needs it); only admins may write. NEVER store secrets here.
+    match /global_config/system_defaults {
+      allow get: if signedIn();
+      allow list: if false;
+      allow write: if isAdmin();
+    }
+
+    match /families/{familyId} {
+      allow delete: if isAdmin();   // admin wipe deletes the parent doc
+
+      match /members/{uid} {
+        allow get: if isSelf(uid) || isAdmin();
+        allow list: if isAdmin();
+        allow create: if isSelf(uid)
+          && request.resource.data.id == uid
+          && request.resource.data.email == request.auth.token.email
+          && (request.resource.data.role == 'user' || isAdmin());
+        allow update: if isAdmin()
+          || (isSelf(uid)
+              && request.resource.data.id == resource.data.id
+              && request.resource.data.email == resource.data.email
+              && request.resource.data.role == resource.data.role);
+        allow delete: if isAdmin();
+      }
+
+      match /tasks/{taskId} {
+        allow get, list: if isAdmin()
+          || (signedIn() && resource.data.ownerId == request.auth.uid);
+        allow create: if isAdmin()
+          || (signedIn() && request.resource.data.ownerId == request.auth.uid);
+        allow update: if isAdmin()
+          || (signedIn() && resource.data.ownerId == request.auth.uid
+              && request.resource.data.ownerId == resource.data.ownerId);
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.ownerId == request.auth.uid);
+      }
+
+      match /streaks/{uid} {
+        allow get: if isSelf(uid) || isAdmin();
+        allow list: if isAdmin();
+        allow create, update: if isSelf(uid) || isAdmin();
+        allow delete: if isAdmin();
+        match /completions/{cycleId} {
+          allow get, list: if isSelf(uid) || isAdmin();
+          allow create, update: if isSelf(uid) || isAdmin();
+          allow delete: if isSelf(uid) || isAdmin();
+        }
+      }
+    }
+
+    // Audit log: signed-in users may append entries stamped with their own UID
+    // (admins may also log while impersonating, where the entry names the subject).
+    // Only admins can read; only admins can delete (wipe). Nobody can edit history.
+    match /audit_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if signedIn()
+        && (request.resource.data.uid == request.auth.uid || isAdmin())
+        && request.resource.data.keys().hasOnly(
+             ['action', 'details', 'user', 'uid', 'role', 'cycleId', 'timestamp']);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

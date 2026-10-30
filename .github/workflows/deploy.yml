@@ -1,0 +1,65 @@
+name: Deploy App
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Validate & Inject Firebase Secret
+        env:
+          FIREBASE_KEY_SECRET: ${{ secrets.FIREBASE_API_KEY }}
+        run: |
+          set -x
+          echo "=== TRACE: VALIDATING FILES ==="
+          if [ ! -f "index.html" ]; then
+            echo "ERROR: index.html missing!"
+            exit 1
+          fi
+          
+          if [ -z "$FIREBASE_KEY_SECRET" ]; then
+            echo "ERROR: FIREBASE_API_KEY secret is missing!"
+            exit 1
+          fi
+
+          echo "=== TRACE: INJECTING API KEY ==="
+          sed -i 's/__FIREBASE_API_KEY__/${{ secrets.FIREBASE_API_KEY }}/g' index.html
+          
+          if grep -q "__FIREBASE_API_KEY__" index.html; then
+            echo "ERROR: API Key injection failed!"
+            exit 1
+          else
+            echo "SUCCESS: API Key injected."
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

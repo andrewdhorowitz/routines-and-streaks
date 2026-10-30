@@ -1,0 +1,17 @@
+{
+  "private_hosts": [],
+  "project": "Routines & Streaks",
+  "public_urls": {
+    "demo": null,
+    "docs": "https://routines.andrewdhorowitz.com/docs/architecture.md",
+    "interactive": "https://routines.andrewdhorowitz.com/docs/interactive-architecture.html",
+    "site": "https://routines.andrewdhorowitz.com/"
+  },
+  "section": {
+    "blurb": "Routines and streaks web app \u2014 daily routines on a noon cycle, persistent streaks, Google sign-in.",
+    "family_visible": false,
+    "group": "projects",
+    "include": true
+  },
+  "status": "public"
+}

@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Routines & Streaks</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 pb-44">
+
+    <!-- Active In-Place Impersonation Banner -->
+    <div id="impersonationBanner" class="bg-amber-600 text-white px-4 py-2 text-xs font-bold text-center flex justify-between items-center shadow-md hidden z-50 sticky top-0">
+        <span><span id="bannerIcon">👑</span> <span id="bannerTitle">SUPER ADMIN IMPERSONATION:</span> Viewing as <span id="impersonatedUserLabel" class="underline font-black"></span> (<span id="impersonatedRoleLabel"></span>)</span>
+        <button id="exitImpersonationBtn" data-action="exit-impersonation" class="bg-white text-amber-800 px-2.5 py-1 rounded text-[10px] font-extrabold shadow hover:bg-amber-50">Exit Impersonation</button>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 shadow-sm">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900" id="userNameDisplay">Routines & Streaks</h1>
+                <p class="text-xs text-slate-500"><i class="fa-solid fa-user-tag text-[10px] mr-1"></i><span id="userRoleBadge">Not Signed In</span></p>
+            </div>
+            <div class="flex items-center space-x-1.5">
+                <!-- Shield is ALWAYS visible unless actively impersonating a user -->
+                <button id="adminShieldBtn" data-action="shield-clicked" class="text-slate-400 hover:text-amber-600 p-1.5 transition" title="Super Admin Portal">
+                    <i class="fa-solid fa-shield-halved text-base"></i>
+                </button>
+                <div id="navTabs" class="flex items-center space-x-1 hidden">
+                    <button data-action="switch-tab" data-tab="dashboard" id="navDashboard" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white">Today</button>
+                    <button data-action="switch-tab" data-tab="streaks" id="navStreaks" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">Streaks</button>
+                    <button data-action="switch-tab" data-tab="info" id="navInfo" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">Info</button>
+                    <button data-action="sign-out" id="signOutBtn" class="px-2 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-red-600 hover:bg-red-50" title="Sign Out"><i class="fa-solid fa-right-from-bracket"></i></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-4 space-y-4">
+
+        <!-- Onboarding / Auth Section (Phase 1: Google Sign-In Only + Welcome Provisioning) -->
+        <div id="authSection" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+            <div id="googleSignInView" class="space-y-4">
+                <h2 class="text-xl font-bold text-slate-900 text-center">Welcome to Routines & Streaks</h2>
+                <p class="text-xs text-slate-500 text-center" id="authSubtitle">Sign in with Google to track your evening-to-morning routine cycle and build daily streaks.</p>
+                <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
+                    <i class="fa-brands fa-google text-red-400 text-base"></i>
+                    <span>Continue with Google</span>
+                </button>
+                <div class="pt-2 border-t border-slate-100 text-center">
+                    <button type="button" data-action="shield-clicked" class="text-[11px] text-amber-700 hover:text-amber-800 font-bold">
+                        <i class="fa-solid fa-shield-halved mr-1"></i> Super Admin Sign-In
+                    </button>
+                </div>
+            </div>
+
+            <!-- First-Time Welcome / Profile Confirmation Screen -->
+            <div id="welcomeProvisionView" class="space-y-4 hidden">
+                <h2 class="text-xl font-bold text-slate-900 text-center">Confirm Your Name</h2>
+                <p class="text-xs text-slate-500 text-center">Set your display name to initialize your personal routine checklist and streak tracker.</p>
+                <form id="welcomeProvisionForm" class="space-y-3">
+                    <input type="text" id="welcomeDisplayNameInput" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Your Display Name">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold shadow">
+                        <i class="fa-solid fa-rocket mr-1"></i> Create Profile & Start Routine
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Super Admin Global Bar (Visible ONLY when Super Admin is signed in & NOT impersonating) -->
+        <div id="superAdminGlobalSectionContainer" class="hidden"></div>
+
+        <!-- Dashboard Tab -->
+        <div id="tabDashboard" class="space-y-4 hidden">
+            <!-- Cycle Banner -->
+            <div class="bg-blue-900 text-white p-4 rounded-2xl shadow-md flex justify-between items-center">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="bg-blue-800 text-blue-200 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase" id="familyNameBanner">Solo Mode</span>
+                        <span class="text-[11px] text-blue-200 font-semibold" id="currentCycleDateDisplay"></span>
+                    </div>
+                    <h2 class="text-lg font-bold mt-1">Evening-to-Morning Cycle</h2>
+                    <p class="text-[11px] text-blue-200" id="cycleWindows">Early buffer: 60m before reminder</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-2xl font-black" id="streakCounter">🔥 0</span>
+                    <p class="text-[10px] text-blue-300">Active Streak</p>
+                </div>
+            </div>
+
+            <!-- Tasks Header & Controls -->
+            <div class="flex justify-between items-center px-1">
+                <div class="flex items-center space-x-1.5">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">My Routine</h3>
+                    <select id="taskPhaseFilter" class="border rounded-lg px-2 py-1 text-[10px] bg-white text-slate-600 font-semibold">
+                        <option value="all">All Phases</option>
+                        <option value="evening">🌙 Evening (≥12:00)</option>
+                        <option value="morning">☀️ Morning (&lt;12:00)</option>
+                        <option value="pending">⏳ Pending Only</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                    <button data-action="reset-user-tasks" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] px-2.5 py-1.5 rounded-xl font-semibold" title="Reset tasks to system defaults">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> Reset Defaults
+                    </button>
+                    <button data-action="open-add-task" id="addTaskBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-xl font-semibold shadow">
+                        <i class="fa-solid fa-plus mr-1"></i> Add Task
+                    </button>
+                </div>
+            </div>
+
+            <div id="taskList" class="space-y-3"></div>
+        </div>
+
+        <!-- Streaks & History Tab -->
+        <div id="tabStreaks" class="space-y-4 hidden">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 text-center space-y-3">
+                <div class="flex justify-around items-center border-b pb-3">
+                    <div>
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Current Streak</p>
+                        <p class="text-2xl font-black text-amber-600" id="streaksTabCurrent">🔥 0</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Longest Streak</p>
+                        <p class="text-xl font-extrabold text-slate-800" id="streaksTabLongest">🏆 0</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Total Cycles</p>
+                        <p class="text-xl font-extrabold text-slate-800" id="streaksTabTotal">✅ 0</p>
+                    </div>
+                </div>
+                <h2 class="text-sm font-bold text-slate-700 pt-1">Streak Milestone Matrix (Up to 15 Stars)</h2>
+                <p class="text-xs text-slate-500">Checking off all main tasks completes the daily cycle and lights up a star!</p>
+                <div id="starGridContainer" class="grid grid-cols-5 gap-2 justify-center py-2 max-w-xs mx-auto"></div>
+                <button data-action="test-celebration" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Test Celebration Animation
+                </button>
+            </div>
+
+            <!-- Persistent Completion History -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Completed Cycle History</h3>
+                <div id="completionHistoryList" class="space-y-2 text-xs"></div>
+            </div>
+        </div>
+
+        <!-- Info Tab -->
+        <div id="tabInfo" class="space-y-4 hidden">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                <h2 class="text-lg font-bold">Device Setup & Alerts</h2>
+                <p class="text-xs text-blue-800 font-semibold" id="detectedPlatformInfo"></p>
+                <div class="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg border" id="platformInstallInstructions"></div>
+                <button data-action="test-notification" class="w-full bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold shadow">
+                    <i class="fa-solid fa-bell mr-1"></i> Test Browser Notification
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="max-w-md mx-auto px-4 pb-8 text-center">
+        <p class="text-xs text-slate-500">© 2026 Andrew Horowitz · Routines & Streaks <span id="appVersion">V1</span> · Built with Muse · <a href="https://andrewdhorowitz.com/privacy" class="underline inline-block py-1">Privacy</a></p>
+    </footer>
+    <script>
+        const APP_VERSION = "V1";
+        document.getElementById("appVersion").textContent = APP_VERSION;
+    </script>
+
+    <!-- Celebration Modal -->
+    <div id="celebrationModal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center space-y-4 animate-bounce">
+            <div class="text-5xl">🎉🔥🌟</div>
+            <h2 class="text-xl font-black text-slate-900">Cycle Complete!</h2>
+            <p class="text-xs text-slate-600">Every main routine task is checked off! Your streak is locked in for this cycle!</p>
+            <button data-action="close-modals" class="w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow">Awesome!</button>
+        </div>
+    </div>
+
+    <!-- Super Admin Login Modal (When clicking Shield while not signed in as Super Admin) -->
+    <div id="adminLoginModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4">
+            <h2 class="text-lg font-bold"><i class="fa-solid fa-shield-halved text-amber-600 mr-1.5"></i>Super Admin Portal</h2>
+            <p class="text-xs text-slate-500">Sign in with the Super Admin Google account to access the Global User Directory, edit default starter tasks, or impersonate users.</p>
+            <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
+                <i class="fa-brands fa-google text-red-400 text-base"></i><span>Sign in with Google</span>
+            </button>
+            <button type="button" data-action="close-modals" class="w-full bg-slate-100 py-2 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Add / Edit Task Modal -->
+    <div id="taskModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4">
+            <h2 class="text-lg font-bold" id="taskModalTitle">Add Routine Task</h2>
+            <form id="taskForm" class="space-y-3">
+                <input type="hidden" id="editTaskIdInput" value="">
+                <input type="text" id="newTaskTitle" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Main Task Title">
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="text-[10px] text-slate-500">Reminder</label><input type="time" id="newTaskReminder" value="20:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
+                    <div><label class="text-[10px] text-slate-500">Deadline</label><input type="time" id="newTaskDeadline" value="21:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
+                </div>
+                <input type="text" id="newSubtasks" class="w-full border rounded-xl px-3 py-2 text-xs" placeholder="Sub-dependent tasks (comma separated)">
+                <div class="flex space-x-2 pt-1">
+                    <button type="button" data-action="close-modals" class="flex-1 bg-slate-100 py-2 rounded-xl text-xs font-semibold">Cancel</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-xl text-xs font-semibold">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Super Admin Global Portal Modal -->
+    <div id="superAdminGlobalModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-lg rounded-2xl p-5 shadow-xl space-y-4 max-h-[88vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-server text-amber-600 mr-1"></i> Super Admin Global Portal</h2>
+                <div class="flex items-center space-x-2">
+                    <span id="backendHealthBadge" class="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">Checking...</span>
+                    <button data-action="close-modals" class="text-slate-400 font-bold">✕</button>
+                </div>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- 1. Global System Default Tasks & Settings Template -->
+                <div class="bg-slate-50 border p-3 rounded-xl space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-700 uppercase">1. System Default Tasks & Buffer</span>
+                        <div class="flex items-center space-x-1">
+                            <label class="text-[10px] text-slate-500 font-bold">Early Buffer (mins):</label>
+                            <input type="number" id="globalEarlyBufferInput" value="60" min="0" max="1440" class="w-16 border rounded px-1.5 py-0.5 text-xs bg-white">
+                        </div>
+                    </div>
+                    <textarea id="globalDefaultTasksInput" class="w-full h-28 border rounded-lg p-2 font-mono text-[10px] bg-white"></textarea>
+                    <div class="flex justify-end">
+                        <button data-action="save-global-config" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold text-[10px]">Save System Defaults</button>
+                    </div>
+                </div>
+
+                <!-- 2. Registered Users Directory (families/default/members) -->
+                <div>
+                    <h3 class="font-bold text-slate-700 uppercase mb-1">2. Registered Users Directory (Solo Mode)</h3>
+                    <div id="globalFamiliesList" class="bg-slate-50 border rounded-xl p-3 space-y-2 max-h-52 overflow-y-auto">Loading...</div>
+                </div>
+
+                <!-- 3. Audit Logs -->
+                <div>
+                    <h3 class="font-bold text-slate-700 uppercase mb-1">3. Global Audit Logs</h3>
+                    <div id="globalAuditLogsList" class="bg-slate-900 text-emerald-400 font-mono rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto text-[10px]">Loading...</div>
+                </div>
+
+                <!-- 4. Danger Zone -->
+                <div class="bg-red-50 border border-red-200 p-3 rounded-xl space-y-2">
+                    <span class="font-bold text-red-900 uppercase">4. Danger Zone</span>
+                    <button data-action="nuke-all-dbs" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold shadow">
+                        <i class="fa-solid fa-skull-crossbones mr-1"></i> Nuke / Reset ALL DBs
+                    </button>
+                </div>
+            </div>
+            <button type="button" data-action="close-modals" class="w-full bg-slate-900 py-2.5 rounded-xl text-xs text-white font-semibold">Close Global Portal & View Routine</button>
+        </div>
+    </div>
+
+    <!-- Debug Console -->
+    <div id="debugConsole" style="display:none" class="fixed bottom-0 left-0 right-0 bg-slate-900 text-emerald-400 font-mono text-[11px] p-3 max-h-40 overflow-y-auto border-t-2 border-emerald-500 z-50">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-1 mb-1">
+            <span class="font-bold text-white"><i class="fa-solid fa-terminal mr-1"></i> Debug Console & Trace</span>
+            <div class="space-x-1.5">
+                <button data-action="copy-debug-logs" class="bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5 rounded text-[10px] text-white font-bold">Copy Logs</button>
+                <button data-action="clear-debug-logs" class="bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-300">Clear</button>
+                <button data-action="hide-debug-console" class="bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-400">X</button>
+            </div>
+        </div>
+        <div id="debugLogs"></div>
+    </div>
+
+    <!-- User-facing error banner (Phase 1.1, #20): failures a user must see go here, not only to the Debug Console -->
+    <div id="userErrorBanner" style="display:none" class="fixed top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl z-[60] max-w-[92%] text-center"></div>
+
+    <script>
+        // ============================================================================
+        // FIX 1 — CYCLE DATES (SPEC §3): Noon-to-noon local cycle, zero toISOString()
+        // ============================================================================
+        function localDateStr(d = new Date()) { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+        function cycleIdFor(d = new Date()) { const c = new Date(d); if (c.getHours() < 12) c.setDate(c.getDate() - 1); return localDateStr(c); }
+        function addDays(dateStr, n) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n); return localDateStr(d); }
+        function reminderDateTime(task, cycleId) { const [h, m] = task.reminder.split(':').map(Number); const dateStr = h >= 12 ? cycleId : addDays(cycleId, 1); const dt = new Date(dateStr + 'T12:00:00'); dt.setHours(h, m, 0, 0); return dt; }
+
+        // ============================================================================
+        // FIX 5 — RENDERING SAFETY (SPEC §8): Single esc() helper
+        // ============================================================================
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // ============================================================================
+        // FIX 6 — IDENTITY & CONFIG HYGIENE (SPEC §5, §10): crypto.getRandomValues
+        // ============================================================================
+        function generateSecureId(prefix = 'id_') {
+            const arr = new Uint8Array(8);
+            window.crypto.getRandomValues(arr);
+            const hex = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+            return prefix + hex;
+        }
+
+        const DEFAULT_FAMILY_ID = 'default';
+        // Phase 1.1 (#17): Super Admin status is read from the Firestore
+        // system_admins/{uid} registry — Console-managed and enforced by the
+        // security rules. No admin email is hardcoded in the client anymore.
+
+        const FALLBACK_DEFAULT_TASKS = [
+            { title: 'Plan & lay out tomorrow outfit', reminder: '20:30', deadline: '21:30', order: 0, subtasks: [{ title: 'Check weather & shoes', done: false }] },
+            { title: 'Pack school bag & homework', reminder: '20:45', deadline: '21:30', order: 1, subtasks: [{ title: 'Charge devices', done: false }] },
+            { title: 'Morning launch & ready on time', reminder: '06:45', deadline: '07:15', order: 2, subtasks: [] }
+        ];
+
+        function logDebug(msg, err = false) {
+            const logsEl = document.getElementById('debugLogs');
+            if (logsEl) {
+                logsEl.innerHTML += `<div class="${err ? 'text-red-400 font-bold' : 'text-emerald-400'}">[${esc(new Date().toLocaleTimeString())}] ${esc(msg)}</div>`;
+                logsEl.scrollTop = logsEl.scrollHeight;
+            }
+            if (err) console.error(msg); else console.log(msg);
+        }
+
+        // Phase 1.1 (#20): the one visible-error surface. Anything a signed-in user
+        // needs to know about (access denied, load failures) goes through here —
+        // the Debug Console alone is not a user interface.
+        let userErrorTimer = null;
+        function showUserError(message) {
+            logDebug('USER ERROR SHOWN: ' + message, true);
+            const banner = document.getElementById('userErrorBanner');
+            if (!banner) return;
+            banner.textContent = message;
+            banner.style.display = '';
+            if (userErrorTimer) clearTimeout(userErrorTimer);
+            userErrorTimer = setTimeout(() => { banner.style.display = 'none'; }, 7000);
+        }
+
+        // #20 remainder: translate raw Firestore errors into words a person can act
+        // on, plus a once-per-key variant so a failing listener doesn't spam the
+        // banner (keys reset on page load).
+        function friendlyError(e, fallback) {
+            if (e && (e.code === 'permission-denied' || /insufficient permissions/i.test(e.message || ''))) {
+                return 'Access denied by the security rules. If this should work, sign out and back in; if it keeps happening, tell the app owner.';
+            }
+            return fallback;
+        }
+        const userErrorOnceKeys = new Set();
+        function showUserErrorOnce(key, message) {
+            if (userErrorOnceKeys.has(key)) return;
+            userErrorOnceKeys.add(key);
+            showUserError(message);
+        }
+
+        function copyDebugLogs() {
+            navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert("Full debug trace copied to clipboard!"));
+        }
+        window.onerror = (m, u, l) => logDebug(`RUNTIME ERROR: ${m} (Line ${l})`, true);
+
+        const firebaseConfig = { apiKey: "__FIREBASE_API_KEY__", authDomain: "family-routines-app.firebaseapp.com", projectId: "family-routines-app" };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        logDebug('Booting Routines & Streaks Phase 1 (Solo Mode)...');
+
+        let session = {
+            uid: '',
+            email: '',
+            userName: '',
+            role: 'new', // 'user' | 'admin'
+            earlyBuffer: 60,
+            currentStreak: 0,
+            longestStreak: 0,
+            totalCompletedCycles: 0,
+            isImpersonating: false,
+            originalAdminSession: null
+        };
+
+        let tasks = [];
+        let completionHistory = [];
+        let allRegisteredMembers = [];
+        let tasksUnsub = null;
+        let streakUnsub = null;
+        let historyUnsub = null;
+        let configUnsub = null;
+
+        function logUsage(action, details) {
+            db.collection('audit_logs').add({
+                action: String(action),
+                details: String(details),
+                user: session.userName || session.email || 'Anon',
+                uid: session.uid || '',
+                role: session.role,
+                cycleId: cycleIdFor(),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => logDebug(`Audit log err: ${e.message}`, true));
+        }
+
+        // ============================================================================
+        // P7 — IMPERSONATION ONE-WAY STATE GUARD (Blocks hash, popstate, direct calls)
+        // ============================================================================
+        function isBlockedByImpersonationGuard(attemptedAction) {
+            if (session.isImpersonating) {
+                logDebug(`State Guard blocked admin action "${attemptedAction}" during active impersonation.`, true);
+                return true;
+            }
+            return false;
+        }
+
+        window.addEventListener('hashchange', () => {
+            if (session.isImpersonating && (window.location.hash.includes('admin') || window.location.hash.includes('global'))) {
+                history.replaceState(null, '', window.location.pathname);
+                closeModals();
+                logDebug('State Guard blocked URL hash navigation to admin view.', true);
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (session.isImpersonating) {
+                closeModals();
+                history.pushState({ impersonating: true }, '', window.location.pathname);
+                logDebug('State Guard intercepted back/forward navigation during impersonation.');
+            }
+        });
+
+        function startInplaceImpersonation(targetUid, targetName, targetEmail) {
+            if (session.role !== 'admin' || session.isImpersonating) return;
+            session.originalAdminSession = {
+                uid: session.uid,
+                email: session.email,
+                userName: session.userName,
+                role: 'admin'
+            };
+
+            session.uid = targetUid;
+            session.userName = targetName || 'User';
+            session.email = targetEmail || '';
+            session.role = 'user';
+            session.isImpersonating = true;
+
+            closeModals();
+            history.pushState({ impersonating: true }, '', window.location.pathname);
+            logDebug(`Started one-way in-place impersonation of ${session.userName}.`);
+            logUsage('Start Impersonation', `Super Admin -> ${session.userName} (${session.uid})`);
+            renderAppState();
+        }
+
+        function exitInplaceImpersonation() {
+            if (!session.isImpersonating || !session.originalAdminSession) return;
+            const orig = session.originalAdminSession;
+            session.uid = orig.uid;
+            session.email = orig.email;
+            session.userName = orig.userName;
+            session.role = orig.role;
+            session.isImpersonating = false;
+            session.originalAdminSession = null;
+
+            teardownUserListeners();
+            document.getElementById('impersonationBanner').classList.add('hidden');
+            logDebug('Exited impersonation. Restored Super Admin session.');
+            logUsage('Exit Impersonation', 'Restored Super Admin session');
+            renderAppState();
+        }
+
+        // ============================================================================
+        // P2 — AUTH: Popup-First (Cross-Origin Safe on GitHub Pages) + Redirect Fallback
+        // ============================================================================
+        async function triggerGoogleSignIn() {
+            closeModals();
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            logDebug('Starting Google Sign-In popup...');
+            showUserError('Signing in...');
+            // #23 watchdog: a popup promise that neither resolves nor rejects used
+            // to leave the tap dead forever — no error, no fallback. If it has not
+            // settled within 10s, take the full-page redirect path exactly once;
+            // the settled/redirectStarted flags keep a late settle from fighting it.
+            let popupSettled = false;
+            let redirectStarted = false;
+            const startRedirectFallback = async (note) => {
+                if (redirectStarted) return;
+                redirectStarted = true;
+                showUserError(note);
+                logDebug('Popup failed. Falling back to signInWithRedirect...');
+                try {
+                    await auth.signInWithRedirect(provider);
+                } catch (re) {
+                    logDebug(`Redirect fallback failed (${re.code || 'unknown'}): ${re.message}`, true);
+                    showUserError(`Sign-in failed (${re.code || 'unknown error'}): ${re.message} Please try again.`);
+                }
+            };
+            const watchdog = setTimeout(() => {
+                if (popupSettled || redirectStarted) return;
+                logDebug('Popup watchdog: no settle within 10s. Treating as hung.', true);
+                startRedirectFallback("Popup sign-in isn't responding. Trying the full-page sign-in instead...");
+            }, 10000);
+            try {
+                const res = await auth.signInWithPopup(provider);
+                popupSettled = true;
+                clearTimeout(watchdog);
+                if (redirectStarted) return;
+                if (res && res.user) {
+                    logDebug('Google Popup Sign-In succeeded.');
+                }
+            } catch (e) {
+                popupSettled = true;
+                clearTimeout(watchdog);
+                logDebug(`Popup notice (${e.code || 'unknown'}): ${e.message}`, true);
+                if (redirectStarted) return;
+                if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+                    // #23: the user backed out of the popup themselves — say so gently
+                    // on screen, and do NOT bounce them into a full-page redirect.
+                    showUserError('Sign-in cancelled — tap to try again.');
+                    return;
+                }
+                // #23: every other popup failure used to die in this debug log (or in
+                // an alert some webviews never show). Now it is surfaced on screen AND
+                // falls back to the full-page redirect sign-in.
+                await startRedirectFallback(`Popup sign-in didn't work (${e.code || e.message}). Trying the full-page sign-in instead...`);
+            }
+        }
+
+        auth.getRedirectResult().then(res => {
+            if (res && res.user) {
+                logDebug('Redirect sign-in completed.');
+            }
+        }).catch(e => {
+            logDebug(`Redirect Auth Error (${e.code || 'unknown'}): ${e.message}`, true);
+            showUserError(`Sign-in did not finish (${e.code || 'unknown error'}): ${e.message} Please try signing in again.`);
+        });
+
+        auth.onAuthStateChanged(async user => {
+            teardownUserListeners();
+            if (!user) {
+                session = { uid: '', email: '', userName: '', role: 'new', earlyBuffer: 60, currentStreak: 0, longestStreak: 0, totalCompletedCycles: 0, isImpersonating: false, originalAdminSession: null };
+                document.getElementById('debugConsole').style.display = 'none';
+                logDebug('No signed-in user. Showing Google Sign-In screen.');
+                renderAppState();
+                return;
+            }
+
+            logDebug('Auth state active.');
+            await subscribeGlobalSystemDefaults();
+
+            // Phase 1.1 (#17): admin status comes from the system_admins registry —
+            // the same record the Firestore rules enforce. The rules let every
+            // signed-in user read their OWN registry entry; no entry = not an admin.
+            let isSuperAdmin = false;
+            try {
+                const adminSnap = await db.collection('system_admins').doc(user.uid).get();
+                isSuperAdmin = adminSnap.exists && adminSnap.data().enabled === true;
+            } catch (e) {
+                logDebug(`Admin registry check failed: ${e.message}`, true);
+            }
+            session.uid = user.uid;
+            session.email = user.email || '';
+
+            try {
+                const memRef = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('members').doc(user.uid);
+                const memDoc = await memRef.get();
+
+                if (isSuperAdmin) {
+                    document.getElementById('debugConsole').style.display = '';
+                    session.userName = (memDoc.exists && memDoc.data().name) ? memDoc.data().name : (user.displayName || 'Andrew (Super Admin)');
+                    session.role = 'admin';
+                    session.isImpersonating = false;
+                    session.originalAdminSession = null;
+
+                    // Auto-provision Super Admin's personal Solo Mode profile & starter tasks if not yet created
+                    if (!memDoc.exists) {
+                        logDebug('Auto-provisioning Super Admin personal Solo Mode profile & tasks...');
+                        await provisionUserBatch(user.uid, session.userName, session.email, 'admin');
+                    } else {
+                        const syncFields = { lastActive: firebase.firestore.FieldValue.serverTimestamp() };
+                        if (memDoc.data().role !== 'admin') syncFields.role = 'admin';
+                        await memRef.set(syncFields, { merge: true });
+                    }
+                    logUsage('Super Admin Login', user.email);
+                    renderAppState();
+                    return;
+                }
+
+                // Regular user flow: check if profile exists under families/default/members/{uid}
+                if (!memDoc.exists) {
+                    logDebug('First-time user detected. Showing Welcome display-name confirmation.');
+                    document.getElementById('authSection').classList.remove('hidden');
+                    document.getElementById('googleSignInView').classList.add('hidden');
+                    document.getElementById('welcomeProvisionView').classList.remove('hidden');
+                    document.getElementById('welcomeDisplayNameInput').value = user.displayName || (user.email ? user.email.split('@')[0] : '');
+                    document.getElementById('userRoleBadge').innerText = 'Confirm Profile';
+                } else {
+                    const data = memDoc.data();
+                    session.userName = data.name || user.displayName || 'User';
+                    session.role = 'user';
+                    await memRef.set({ lastActive: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    renderAppState();
+                }
+            } catch (e) {
+                logDebug(`Profile lookup error: ${e.message}`, true);
+                showUserError('We could not load your profile. Please check your connection and refresh the page.');
+            }
+        });
+
+        // ============================================================================
+        // P4 — PROVISIONING (First Sign-In, ONE Batched Write)
+        // ============================================================================
+        async function provisionUserBatch(uid, confirmedName, email, roleStr = 'user') {
+            const currentCycle = cycleIdFor();
+            let template = FALLBACK_DEFAULT_TASKS;
+            try {
+                const cfgDoc = await db.collection('global_config').doc('system_defaults').get();
+                if (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks) && cfgDoc.data().defaultTasks.length > 0) {
+                    template = cfgDoc.data().defaultTasks;
+                }
+            } catch (e) {
+                logDebug(`Using fallback default tasks: ${e.message}`);
+            }
+
+            const batch = db.batch();
+            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+
+            // 1. Member profile doc
+            const memRef = famRef.collection('members').doc(uid);
+            batch.set(memRef, {
+                id: uid,
+                name: confirmedName,
+                email: email || '',
+                role: roleStr,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // 2. Copy system default tasks stamped with current cycleIdFor() and ownerId = uid
+            template.forEach((item, idx) => {
+                const tid = generateSecureId('task_');
+                const tRef = famRef.collection('tasks').doc(tid);
+                batch.set(tRef, {
+                    id: tid,
+                    ownerId: uid,
+                    title: String(item.title || 'Routine Task'),
+                    reminder: String(item.reminder || '20:30'),
+                    deadline: String(item.deadline || '21:30'),
+                    order: typeof item.order === 'number' ? item.order : idx,
+                    done: false,
+                    cycleId: currentCycle,
+                    subtasks: Array.isArray(item.subtasks) ? item.subtasks.map(s => ({ title: String(s.title || ''), done: false })) : []
+                });
+            });
+
+            // 3. Streak doc initialized at 0
+            const streakRef = famRef.collection('streaks').doc(uid);
+            batch.set(streakRef, {
+                currentStreak: 0,
+                longestStreak: 0,
+                totalCompletedCycles: 0,
+                lastCompletedCycleId: null,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            await batch.commit();
+        }
+
+        async function handleWelcomeProvision(e) {
+            e.preventDefault();
+            const user = auth.currentUser;
+            if (!user) return;
+            const confirmedName = document.getElementById('welcomeDisplayNameInput').value.trim() || 'User';
+            const uid = user.uid;
+
+            logDebug('Provisioning new user in one batched write...');
+            try {
+                await provisionUserBatch(uid, confirmedName, user.email || '', 'user');
+                session.userName = confirmedName;
+                session.role = 'user';
+                logDebug('Provisioning complete.');
+                logUsage('User Provisioned', `${confirmedName} (${uid})`);
+                renderAppState();
+            } catch (err) {
+                logDebug(`Provisioning failed: ${err.message}`, true);
+                alert('Error provisioning profile: ' + err.message);
+            }
+        }
+
+        async function subscribeGlobalSystemDefaults() {
+            if (configUnsub) configUnsub();
+            configUnsub = db.collection('global_config').doc('system_defaults').onSnapshot(doc => {
+                if (doc.exists) {
+                    const d = doc.data();
+                    if (typeof d.earlyBufferMinutes === 'number') {
+                        session.earlyBuffer = d.earlyBufferMinutes;
+                    }
+                }
+                const cw = document.getElementById('cycleWindows');
+                if (cw) cw.innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
+            }, err => {
+                logDebug(`Config listener warning: ${err.message}`, true);
+                showUserErrorOnce('config', friendlyError(err, 'Live settings updates are not coming through. Refresh the page.'));
+            });
+        }
+
+        function teardownUserListeners() {
+            if (tasksUnsub) { tasksUnsub(); tasksUnsub = null; }
+            if (streakUnsub) { streakUnsub(); streakUnsub = null; }
+            if (historyUnsub) { historyUnsub(); historyUnsub = null; }
+            tasks = [];
+            completionHistory = [];
+        }
+
+        // ============================================================================
+        // UI STATE & ROUTING
+        // ============================================================================
+        function renderAppState() {
+            detectPlatform();
+            const isUnauthed = (!session.uid || session.role === 'new');
+            const isPureAdmin = (session.role === 'admin' && !session.isImpersonating);
+
+            const impBanner = document.getElementById('impersonationBanner');
+            const adminShieldBtn = document.getElementById('adminShieldBtn');
+            const superAdminContainer = document.getElementById('superAdminGlobalSectionContainer');
+
+            // P7: While impersonating, hide all admin links/portals
+            if (session.isImpersonating) {
+                document.getElementById('impersonatedUserLabel').innerText = session.userName;
+                document.getElementById('impersonatedRoleLabel').innerText = session.role.toUpperCase();
+                impBanner.classList.remove('hidden');
+                adminShieldBtn.classList.add('hidden');
+                superAdminContainer.classList.add('hidden');
+                superAdminContainer.innerHTML = '';
+            } else {
+                impBanner.classList.add('hidden');
+                adminShieldBtn.classList.remove('hidden');
+            }
+
+            if (isUnauthed) {
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('googleSignInView').classList.remove('hidden');
+                document.getElementById('welcomeProvisionView').classList.add('hidden');
+                document.getElementById('tabDashboard').classList.add('hidden');
+                document.getElementById('tabStreaks').classList.add('hidden');
+                document.getElementById('tabInfo').classList.add('hidden');
+                document.getElementById('navTabs').classList.add('hidden');
+                superAdminContainer.classList.add('hidden');
+                document.getElementById('userNameDisplay').innerText = 'Routines & Streaks';
+                document.getElementById('userRoleBadge').innerText = 'Not Signed In';
+                return;
+            }
+
+            // Authenticated View (Regular User, Super Admin, or Impersonating)
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('navTabs').classList.remove('hidden');
+            document.getElementById('navDashboard').classList.remove('hidden');
+            document.getElementById('navStreaks').classList.remove('hidden');
+            document.getElementById('navInfo').classList.remove('hidden');
+
+            if (isPureAdmin) {
+                superAdminContainer.classList.remove('hidden');
+                superAdminContainer.innerHTML = `
+                    <div class="bg-amber-900 text-white p-4 rounded-2xl shadow-md flex justify-between items-center">
+                        <div>
+                            <p class="text-[10px] uppercase font-bold text-amber-300">👑 Super Admin Mode</p>
+                            <h2 class="text-sm font-bold">Global User Directory & System Config</h2>
+                        </div>
+                        <button data-action="open-admin-portal" class="bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black px-3 py-2 rounded-xl shadow">
+                            Open Global Portal
+                        </button>
+                    </div>`;
+            } else {
+                superAdminContainer.classList.add('hidden');
+                superAdminContainer.innerHTML = '';
+            }
+
+            document.getElementById('userNameDisplay').innerText = session.userName;
+            document.getElementById('userRoleBadge').innerText = session.isImpersonating
+                ? `IMPERSONATING: ${session.userName}`
+                : (isPureAdmin ? 'SUPER ADMIN + SOLO ROUTINE' : 'SOLO MODE');
+            document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
+            document.getElementById('cycleWindows').innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
+
+            const cachedStreak = localStorage.getItem(`firstpaint_streak_${session.uid}`);
+            if (cachedStreak !== null) {
+                const num = parseInt(cachedStreak, 10) || 0;
+                document.getElementById('streakCounter').innerText = `🔥 ${num}`;
+                buildStarGrid(num);
+            }
+
+            switchTab('dashboard');
+            initUserRealtimeSync(session.uid);
+        }
+
+        // ============================================================================
+        // P3, FIX 2, FIX 3 — UID-SCOPED REALTIME LISTENERS & DAILY RESET
+        // ============================================================================
+        function initUserRealtimeSync(uid) {
+            teardownUserListeners();
+            if (!uid) return;
+            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+            logDebug('Subscribing to user-scoped tasks, streak & history.');
+
+            // 1. UID-scoped tasks listener + FIX 2 Daily Reset
+            tasksUnsub = famRef.collection('tasks').where('ownerId', '==', uid).onSnapshot(async snap => {
+                let userTasks = [];
+                snap.forEach(d => userTasks.push({ id: d.id, ...d.data() }));
+                userTasks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+                const currentCycle = cycleIdFor();
+                // FIX 2: If ANY of the user's tasks' cycleId is older than current cycleIdFor(), reset ALL of them
+                const needsReset = userTasks.some(t => !t.cycleId || t.cycleId < currentCycle);
+                if (needsReset && userTasks.length > 0) {
+                    logDebug(`Cycle rollover detected (-> ${currentCycle}). Resetting all ${userTasks.length} user tasks.`);
+                    const batch = db.batch();
+                    userTasks.forEach(t => {
+                        const ref = famRef.collection('tasks').doc(t.id);
+                        const resetSubs = (t.subtasks || []).map(s => ({ title: String(s.title || ''), done: false }));
+                        batch.update(ref, { done: false, cycleId: currentCycle, subtasks: resetSubs });
+                        t.done = false;
+                        t.cycleId = currentCycle;
+                        t.subtasks = resetSubs;
+                    });
+                    await batch.commit();
+                }
+
+                tasks = userTasks;
+                renderTasks();
+                await evaluateMemberStreak(uid);
+            }, err => {
+                logDebug(`Tasks listener error: ${err.message}`, true);
+                showUserErrorOnce('tasks', friendlyError(err, 'Your tasks stopped syncing. Refresh the page.'));
+            });
+
+            // 2. UID-scoped streak listener + FIX 3 Lazy Reconcile on load
+            streakUnsub = famRef.collection('streaks').doc(uid).onSnapshot(async doc => {
+                const curCycle = cycleIdFor();
+                const prevCycle = addDays(curCycle, -1);
+
+                if (!doc.exists) {
+                    session.currentStreak = 0;
+                    session.longestStreak = 0;
+                    session.totalCompletedCycles = 0;
+                    updateStreakUI(0, 0, 0);
+                    return;
+                }
+
+                const data = doc.data();
+                let currentStreak = data.currentStreak || 0;
+                const longestStreak = data.longestStreak || 0;
+                const totalCompleted = data.totalCompletedCycles || 0;
+                const lastComp = data.lastCompletedCycleId || null;
+
+                // FIX 3: Lazy reconcile if lastCompletedCycleId is neither current nor previous cycle
+                if (currentStreak > 0 && lastComp !== curCycle && lastComp !== prevCycle) {
+                    logDebug(`Streak lazy reconcile: lastCompletedCycleId (${lastComp}) is older than ${prevCycle}. Resetting currentStreak to 0.`);
+                    currentStreak = 0;
+                    await famRef.collection('streaks').doc(uid).set({
+                        currentStreak: 0,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                }
+
+                session.currentStreak = currentStreak;
+                session.longestStreak = longestStreak;
+                session.totalCompletedCycles = totalCompleted;
+                localStorage.setItem(`firstpaint_streak_${uid}`, String(currentStreak));
+                updateStreakUI(currentStreak, longestStreak, totalCompleted);
+            }, err => {
+                logDebug(`Streak listener error: ${err.message}`, true);
+                showUserErrorOnce('streak', friendlyError(err, 'Your streak stopped syncing. Refresh the page.'));
+            });
+
+            // 3. P6: UID-scoped completion history listener
+            historyUnsub = famRef.collection('streaks').doc(uid).collection('completions').onSnapshot(snap => {
+                let items = [];
+                snap.forEach(d => items.push({ cycleId: d.id, ...d.data() }));
+                items.sort((a, b) => b.cycleId.localeCompare(a.cycleId));
+                completionHistory = items;
+                renderCompletionHistory();
+            }, err => {
+                logDebug(`History listener error: ${err.message}`, true);
+                showUserErrorOnce('history', friendlyError(err, 'Your history stopped syncing. Refresh the page.'));
+            });
+        }
+
+        function updateStreakUI(current, longest, total) {
+            document.getElementById('streakCounter').innerText = `🔥 ${current}`;
+            document.getElementById('streaksTabCurrent').innerText = `🔥 ${current}`;
+            document.getElementById('streaksTabLongest').innerText = `🏆 ${longest}`;
+            document.getElementById('streaksTabTotal').innerText = `✅ ${total}`;
+            buildStarGrid(current);
+        }
+
+        // FIX 3: Star grid renders min(streak, 15) lit stars out of 15 slots; numeric counter is never capped
+        function buildStarGrid(currentStreak) {
+            const c = document.getElementById('starGridContainer');
+            if (!c) return;
+            const litCount = Math.min(Math.max(0, currentStreak), 15);
+            let html = '';
+            for (let i = 0; i < 15; i++) {
+                const active = i < litCount;
+                html += `<div class="h-10 rounded-xl flex items-center justify-center text-sm ${active ? 'bg-amber-400 text-white shadow' : 'bg-slate-100 text-slate-300'}"><i class="fa-solid fa-star"></i></div>`;
+            }
+            c.innerHTML = html;
+        }
+
+        function renderCompletionHistory() {
+            const listEl = document.getElementById('completionHistoryList');
+            if (!listEl) return;
+            if (completionHistory.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-3">No completed cycles recorded yet. Complete all main tasks to log your first cycle!</p>`;
+                return;
+            }
+            listEl.innerHTML = completionHistory.map(item => {
+                const titles = Array.isArray(item.taskTitles) ? item.taskTitles : [];
+                const pillsHtml = titles.map(t => `<span class="inline-block bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md text-[10px] font-semibold mr-1 mb-1">✓ ${esc(t)}</span>`).join('');
+                return `
+                    <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1.5">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-slate-800">📅 Cycle ${esc(item.cycleId)}</span>
+                            <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">${esc(item.taskCount || titles.length)} tasks completed</span>
+                        </div>
+                        <div class="pt-0.5">${pillsHtml || '<span class="text-[10px] text-slate-400">Completed</span>'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // ============================================================================
+        // P5 & FIX 5 — SAFE TASK RENDERING (Add, Edit, Delete, Reorder, Subtasks)
+        // ============================================================================
+        function renderTasks() {
+            const l = document.getElementById('taskList');
+            if (!l) return;
+            document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
+
+            const phaseFilter = document.getElementById('taskPhaseFilter') ? document.getElementById('taskPhaseFilter').value : 'all';
+            const filtered = tasks.filter(t => {
+                const h = parseInt((t.reminder || '20:00').split(':')[0], 10);
+                if (phaseFilter === 'evening') return h >= 12;
+                if (phaseFilter === 'morning') return h < 12;
+                if (phaseFilter === 'pending') return !t.done;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                l.innerHTML = `<div class="bg-white p-6 rounded-2xl border border-slate-100 text-center text-xs text-slate-400">No tasks match the current view. Click "Reset Defaults" or "Add Task" above!</div>`;
+                return;
+            }
+
+            l.innerHTML = filtered.map((t, idx) => {
+                const h = parseInt((t.reminder || '20:00').split(':')[0], 10);
+                const phaseBadge = h >= 12
+                    ? `<span class="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">🌙 Evening</span>`
+                    : `<span class="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">☀️ Morning</span>`;
+
+                const subsHtml = (t.subtasks || []).map((s, sIdx) => `
+                    <div class="flex items-center justify-between pl-7 pt-1 text-[11px] text-slate-600">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" ${s.done ? 'checked' : ''} data-action="toggle-subtask" data-task-id="${esc(t.id)}" data-sub-idx="${sIdx}" class="rounded text-blue-600">
+                            <span class="${s.done ? 'line-through text-slate-400' : ''}">${esc(s.title)}</span>
+                        </label>
+                        <button data-action="delete-subtask" data-task-id="${esc(t.id)}" data-sub-idx="${sIdx}" class="text-slate-300 hover:text-red-500 px-1" title="Remove subtask">✕</button>
+                    </div>`).join('');
+
+                return `
+                    <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm space-y-1.5">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-start space-x-2.5">
+                                <input type="checkbox" ${t.done ? 'checked' : ''} data-action="toggle-task" data-task-id="${esc(t.id)}" class="mt-1 w-4 h-4 rounded text-blue-600 cursor-pointer">
+                                <div>
+                                    <div class="font-bold text-xs ${t.done ? 'line-through text-slate-400' : 'text-slate-800'}">
+                                        ${esc(t.title)}
+                                    </div>
+                                    <div class="text-[10px] text-slate-400 flex items-center space-x-1.5 mt-0.5">
+                                        ${phaseBadge}
+                                        <span>📅 ${esc(t.cycleId || cycleIdFor())}</span>
+                                        <span>⏰ ${esc(t.reminder)} (Due ${esc(t.deadline)})</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button data-action="move-task-up" data-task-id="${esc(t.id)}" class="text-slate-400 hover:text-slate-700 px-1 text-xs" title="Move Up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                                <button data-action="move-task-down" data-task-id="${esc(t.id)}" class="text-slate-400 hover:text-slate-700 px-1 text-xs" title="Move Down" ${idx === filtered.length - 1 ? 'disabled' : ''}>↓</button>
+                                <button data-action="add-subtask" data-task-id="${esc(t.id)}" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold" title="Add Subtask">+ Sub</button>
+                                <button data-action="edit-task" data-task-id="${esc(t.id)}" class="text-slate-400 hover:text-blue-600 px-1" title="Edit Task"><i class="fa-solid fa-pen text-[11px]"></i></button>
+                                <button data-action="delete-task" data-task-id="${esc(t.id)}" class="text-slate-300 hover:text-red-500 px-1" title="Delete Task"><i class="fa-solid fa-trash text-[11px]"></i></button>
+                            </div>
+                        </div>
+                        ${subsHtml}
+                    </div>`;
+            }).join('');
+        }
+
+        // ============================================================================
+        // FIX 4 (Early Check-Off Window) & FIX 3 (Transactional Streak Engine)
+        // ============================================================================
+        async function toggleTask(taskId) {
+            const t = tasks.find(x => x.id === taskId);
+            if (!t) return;
+            const currentCycle = cycleIdFor();
+
+            // FIX 4: Phase-aware early check-off window check (Super Admin non-impersonating is exempt; regular users & impersonated users are checked)
+            const isExempt = (session.role === 'admin' && !session.isImpersonating);
+            if (!t.done && !isExempt && session.earlyBuffer < 1440) {
+                const remDT = reminderDateTime(t, currentCycle);
+                const openDT = new Date(remDT.getTime() - session.earlyBuffer * 60000);
+                const now = new Date();
+                if (now < openDT) {
+                    const openTimeFormatted = openDT.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                    const openDateFormatted = localDateStr(openDT);
+                    alert(`Too early! "${t.title}" opens at ${openTimeFormatted} on ${openDateFormatted} (${session.earlyBuffer}m before the ${t.reminder} reminder).`);
+                    renderTasks();
+                    return;
+                }
+            }
+
+            const newDone = !t.done;
+            t.done = newDone;
+            t.cycleId = currentCycle;
+
+            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(t.id).update({
+                done: newDone,
+                cycleId: currentCycle
+            });
+            logUsage('Task Toggled', `${t.title} -> ${newDone}`);
+
+            await evaluateMemberStreak(session.uid);
+            if (newDone && tasks.length > 0 && tasks.every(x => x.done)) {
+                triggerCelebration();
+            }
+        }
+
+        async function evaluateMemberStreak(uid) {
+            if (!uid) return false;
+            const userMainTasks = tasks.filter(t => t.ownerId === uid);
+            if (userMainTasks.length === 0) return false;
+
+            const allMainDone = userMainTasks.every(t => t.done === true);
+            if (!allMainDone) return false;
+
+            const currentCycle = cycleIdFor();
+            const prevCycle = addDays(currentCycle, -1);
+            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+            const streakRef = famRef.collection('streaks').doc(uid);
+            const compRef = streakRef.collection('completions').doc(currentCycle);
+            const completedTitles = userMainTasks.map(t => String(t.title || 'Task'));
+
+            let creditedNow = false;
+            try {
+                await db.runTransaction(async tx => {
+                    const compDoc = await tx.get(compRef);
+                    if (compDoc.exists) {
+                        return;
+                    }
+
+                    const streakDoc = await tx.get(streakRef);
+                    const sData = streakDoc.exists ? streakDoc.data() : {
+                        currentStreak: 0,
+                        longestStreak: 0,
+                        totalCompletedCycles: 0,
+                        lastCompletedCycleId: null
+                    };
+
+                    const lastComp = sData.lastCompletedCycleId;
+                    let baseStreak = sData.currentStreak || 0;
+                    if (lastComp !== currentCycle && lastComp !== prevCycle) {
+                        baseStreak = 0;
+                    }
+
+                    const nextStreak = (lastComp === prevCycle) ? (baseStreak + 1) : 1;
+                    const nextLongest = Math.max(nextStreak, sData.longestStreak || 0);
+                    const nextTotal = (sData.totalCompletedCycles || 0) + 1;
+
+                    tx.set(compRef, {
+                        cycleId: currentCycle,
+                        completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        taskCount: completedTitles.length,
+                        taskTitles: completedTitles
+                    });
+
+                    tx.set(streakRef, {
+                        currentStreak: nextStreak,
+                        longestStreak: nextLongest,
+                        totalCompletedCycles: nextTotal,
+                        lastCompletedCycleId: currentCycle,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    creditedNow = true;
+                });
+
+                if (creditedNow) {
+                    logDebug(`Cycle ${currentCycle} completion recorded!`);
+                    logUsage('Cycle Completed', `Cycle ${currentCycle} (${completedTitles.length} tasks)`);
+                }
+            } catch (e) {
+                logDebug(`Streak transaction error: ${e.message}`, true);
+                showUserErrorOnce('streakTx', friendlyError(e, 'Your completion could not be recorded just now. Reload the app to retry.'));
+            }
+            return creditedNow;
+        }
+
+        // ============================================================================
+        // P5 — TASK CRUD, REORDER, SUBTASKS & RESET TO DEFAULTS
+        // ============================================================================
+        function openAddTaskModal() {
+            document.getElementById('taskModalTitle').innerText = 'Add Routine Task';
+            document.getElementById('editTaskIdInput').value = '';
+            document.getElementById('newTaskTitle').value = '';
+            document.getElementById('newTaskReminder').value = '20:30';
+            document.getElementById('newTaskDeadline').value = '21:30';
+            document.getElementById('newSubtasks').value = '';
+            openModal('taskModal');
+        }
+
+        function openEditTaskModal(taskId) {
+            const t = tasks.find(x => x.id === taskId);
+            if (!t) return;
+            document.getElementById('taskModalTitle').innerText = 'Edit Routine Task';
+            document.getElementById('editTaskIdInput').value = t.id;
+            document.getElementById('newTaskTitle').value = t.title || '';
+            document.getElementById('newTaskReminder').value = t.reminder || '20:30';
+            document.getElementById('newTaskDeadline').value = t.deadline || '21:30';
+            document.getElementById('newSubtasks').value = (t.subtasks || []).map(s => s.title).join(', ');
+            openModal('taskModal');
+        }
+
+        async function handleSaveTaskForm(e) {
+            e.preventDefault();
+            if (!session.uid) return;
+            const editId = document.getElementById('editTaskIdInput').value.trim();
+            const title = document.getElementById('newTaskTitle').value.trim();
+            const reminder = document.getElementById('newTaskReminder').value;
+            const deadline = document.getElementById('newTaskDeadline').value;
+            const rawSubs = document.getElementById('newSubtasks').value;
+            const subtasks = rawSubs ? rawSubs.split(',').map(s => s.trim()).filter(Boolean).map(s => ({ title: s, done: false })) : [];
+
+            const tasksCol = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks');
+
+            if (editId) {
+                await tasksCol.doc(editId).update({ title, reminder, deadline, subtasks });
+                logUsage('Task Edited', title);
+            } else {
+                const tid = generateSecureId('task_');
+                const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order ?? 0)) + 1 : 0;
+                await tasksCol.doc(tid).set({
+                    id: tid,
+                    ownerId: session.uid,
+                    title,
+                    reminder,
+                    deadline,
+                    order: nextOrder,
+                    done: false,
+                    cycleId: cycleIdFor(),
+                    subtasks
+                });
+                logUsage('Task Added', title);
+            }
+            closeModals();
+        }
+
+        async function deleteTask(taskId) {
+            const t = tasks.find(x => x.id === taskId);
+            if (!t) return;
+            if (!confirm(`Delete task "${t.title}"?`)) return;
+            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).delete();
+            logUsage('Task Deleted', t.title);
+        }
+
+        async function moveTaskOrder(taskId, direction) {
+            const idx = tasks.findIndex(x => x.id === taskId);
+            if (idx < 0) return;
+            const swapIdx = idx + direction;
+            if (swapIdx < 0 || swapIdx >= tasks.length) return;
+
+            const batch = db.batch();
+            const tasksCol = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks');
+            tasks.forEach((t, i) => {
+                t.order = i;
+            });
+            const tempOrder = tasks[idx].order;
+            tasks[idx].order = tasks[swapIdx].order;
+            tasks[swapIdx].order = tempOrder;
+
+            batch.update(tasksCol.doc(tasks[idx].id), { order: tasks[idx].order });
+            batch.update(tasksCol.doc(tasks[swapIdx].id), { order: tasks[swapIdx].order });
+            await batch.commit();
+        }
+
+        async function toggleSubtask(taskId, subIdx) {
+            const t = tasks.find(x => x.id === taskId);
+            if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
+            t.subtasks[subIdx].done = !t.subtasks[subIdx].done;
+            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+        }
+
+        async function deleteSubtask(taskId, subIdx) {
+            const t = tasks.find(x => x.id === taskId);
+            if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
+            t.subtasks.splice(subIdx, 1);
+            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+        }
+
+        async function promptAddSubtask(taskId) {
+            const subTitle = prompt("Add sub-dependent task (breakdown item):");
+            if (!subTitle || !subTitle.trim()) return;
+            const t = tasks.find(x => x.id === taskId);
+            if (!t) return;
+            const updated = Array.isArray(t.subtasks) ? [...t.subtasks] : [];
+            updated.push({ title: subTitle.trim(), done: false });
+            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: updated });
+        }
+
+        // P5 & FIX 3: Reset user's tasks to system defaults for current cycle AND delete current cycle's completion doc so it can be re-earned
+        async function resetUserTasksToDefaults() {
+            if (!session.uid) return;
+            if (!confirm("Reset your tasks to the system default template for the current cycle? This replaces your custom edits and clears today's completion proof so you can re-earn it.")) return;
+
+            const uid = session.uid;
+            const currentCycle = cycleIdFor();
+            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+
+            try {
+                let template = FALLBACK_DEFAULT_TASKS;
+                const cfgDoc = await db.collection('global_config').doc('system_defaults').get();
+                if (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks) && cfgDoc.data().defaultTasks.length > 0) {
+                    template = cfgDoc.data().defaultTasks;
+                }
+
+                const existingSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
+                const streakRef = famRef.collection('streaks').doc(uid);
+                const compRef = streakRef.collection('completions').doc(currentCycle);
+                const compDoc = await compRef.get();
+                const streakDoc = await streakRef.get();
+
+                const batch = db.batch();
+                existingSnap.forEach(d => batch.delete(d.ref));
+
+                template.forEach((item, idx) => {
+                    const tid = generateSecureId('task_');
+                    const tRef = famRef.collection('tasks').doc(tid);
+                    batch.set(tRef, {
+                        id: tid,
+                        ownerId: uid,
+                        title: String(item.title || 'Routine Task'),
+                        reminder: String(item.reminder || '20:30'),
+                        deadline: String(item.deadline || '21:30'),
+                        order: typeof item.order === 'number' ? item.order : idx,
+                        done: false,
+                        cycleId: currentCycle,
+                        subtasks: Array.isArray(item.subtasks) ? item.subtasks.map(s => ({ title: String(s.title || ''), done: false })) : []
+                    });
+                });
+
+                if (compDoc.exists) {
+                    batch.delete(compRef);
+                    if (streakDoc.exists && streakDoc.data().lastCompletedCycleId === currentCycle) {
+                        const sData = streakDoc.data();
+                        const rolledBackStreak = Math.max(0, (sData.currentStreak || 1) - 1);
+                        const rolledBackTotal = Math.max(0, (sData.totalCompletedCycles || 1) - 1);
+                        batch.set(streakRef, {
+                            currentStreak: rolledBackStreak,
+                            totalCompletedCycles: rolledBackTotal,
+                            lastCompletedCycleId: rolledBackStreak > 0 ? addDays(currentCycle, -1) : null,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    }
+                }
+
+                await batch.commit();
+                logDebug(`Reset tasks to defaults and cleared completion doc for cycle ${currentCycle}.`);
+                logUsage('Reset Tasks to Defaults', `UID: ${uid}, Cycle: ${currentCycle}`);
+            } catch (e) {
+                logDebug(`Reset tasks error: ${e.message}`, true);
+            }
+        }
+
+        // ============================================================================
+        // SUPER ADMIN GLOBAL PORTAL (Directory, System Defaults, Health, Nuke)
+        // ============================================================================
+        function handleShieldClick() {
+            if (isBlockedByImpersonationGuard('handleShieldClick')) return;
+            if (session.role === 'admin') {
+                openSuperAdminGlobalModal();
+            } else if (session.uid) {
+                showUserError(`You're signed in as ${session.userName || 'this account'}, but this account isn't a Super Admin.`);
+            } else {
+                openModal('adminLoginModal');
+            }
+        }
+
+        async function openSuperAdminGlobalModal() {
+            if (isBlockedByImpersonationGuard('openSuperAdminGlobalModal')) return;
+            if (session.role !== 'admin') { showUserError('The Global Portal is available to Super Admin accounts only.'); return; }
+            openModal('superAdminGlobalModal');
+            await loadGlobalDatabaseOverview();
+        }
+
+        async function loadGlobalDatabaseOverview() {
+            if (isBlockedByImpersonationGuard('loadGlobalDatabaseOverview')) return;
+            const fList = document.getElementById('globalFamiliesList');
+            const lList = document.getElementById('globalAuditLogsList');
+            const badge = document.getElementById('backendHealthBadge');
+            fList.innerHTML = 'Querying Firestore...';
+            lList.innerHTML = 'Loading audit logs...';
+
+            try {
+                const cfgRef = db.collection('global_config').doc('system_defaults');
+                const cfgDoc = await cfgRef.get();
+                badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold';
+                badge.innerText = 'Firestore R/W OK ✅';
+
+                const defTasks = (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks)) ? cfgDoc.data().defaultTasks : FALLBACK_DEFAULT_TASKS;
+                const defBuffer = (cfgDoc.exists && typeof cfgDoc.data().earlyBufferMinutes === 'number') ? cfgDoc.data().earlyBufferMinutes : 60;
+                document.getElementById('globalDefaultTasksInput').value = JSON.stringify(defTasks, null, 2);
+                document.getElementById('globalEarlyBufferInput').value = defBuffer;
+
+                const memSnap = await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('members').get();
+                allRegisteredMembers = [];
+                memSnap.forEach(d => allRegisteredMembers.push({ id: d.id, ...d.data() }));
+
+                if (allRegisteredMembers.length === 0) {
+                    fList.innerHTML = `<p class="text-slate-400 text-center py-2">No users registered in families/default yet.</p>`;
+                } else {
+                    fList.innerHTML = allRegisteredMembers.map(m => `
+                        <div class="flex items-center justify-between bg-white border px-3 py-2 rounded-xl text-xs shadow-sm">
+                            <div>
+                                <span class="font-bold text-slate-800">${esc(m.name || 'User')}</span>
+                                <span class="text-[10px] text-slate-400 ml-1">${esc(m.email || '')}</span>
+                                <div class="text-[9px] font-mono text-slate-400">UID: ${esc(m.id)}</div>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button data-action="impersonate-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || 'User')}" data-email="${esc(m.email || '')}" class="bg-amber-100 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded text-[10px] font-bold">
+                                    👑 Impersonate
+                                </button>
+                                <button data-action="admin-delete-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || 'User')}" class="text-slate-400 hover:text-red-600 px-1.5" title="Delete User Data">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>`).join('');
+                }
+
+                const logsSnap = await db.collection('audit_logs').limit(20).get();
+                let logsArr = [];
+                logsSnap.forEach(d => logsArr.push(d.data()));
+                logsArr.sort((a, b) => ((b.timestamp && b.timestamp.seconds) || 0) - ((a.timestamp && a.timestamp.seconds) || 0));
+                lList.innerHTML = logsArr.map(l => `<div>[${esc(l.cycleId || '')}] <b>${esc(l.action)}</b> (${esc(l.user)}): ${esc(l.details)}</div>`).join('') || '<div>No audit logs yet.</div>';
+            } catch (e) {
+                badge.className = 'text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold';
+                badge.innerText = 'Firestore Error ❌';
+                logDebug(`Global overview error: ${e.message}`, true);
+                showUserError(friendlyError(e, 'The Global Directory could not be loaded.'));
+            }
+        }
+
+        async function saveGlobalBackendConfig() {
+            if (isBlockedByImpersonationGuard('saveGlobalBackendConfig')) return;
+            try {
+                const parsed = JSON.parse(document.getElementById('globalDefaultTasksInput').value);
+                if (!Array.isArray(parsed)) throw new Error('Default tasks must be a JSON array.');
+                const earlyBufferMinutes = parseInt(document.getElementById('globalEarlyBufferInput').value, 10) || 60;
+
+                await db.collection('global_config').doc('system_defaults').set({
+                    defaultTasks: parsed,
+                    earlyBufferMinutes,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                logDebug('Saved clean global_config/system_defaults to Firestore.');
+                alert('System Default Tasks & Buffer saved!');
+            } catch (e) {
+                alert('Invalid JSON in System Default Tasks: ' + e.message);
+            }
+        }
+
+        async function adminDeleteSingleUser(uid, name) {
+            if (isBlockedByImpersonationGuard('adminDeleteSingleUser')) return;
+            if (!confirm(`Delete all profile, tasks, and streak data for ${name} (${uid})?`)) return;
+            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+            const tSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
+            const cSnap = await famRef.collection('streaks').doc(uid).collection('completions').get();
+
+            const batch = db.batch();
+            tSnap.forEach(d => batch.delete(d.ref));
+            cSnap.forEach(d => batch.delete(d.ref));
+            batch.delete(famRef.collection('streaks').doc(uid));
+            batch.delete(famRef.collection('members').doc(uid));
+            await batch.commit();
+
+            logDebug(`Deleted user ${name} data.`);
+            await loadGlobalDatabaseOverview();
+        }
+
+        async function wipeAllDatabasesGlobal() {
+            if (isBlockedByImpersonationGuard('wipeAllDatabasesGlobal')) return;
+            if (!confirm("🚨 DANGER: This will permanently wipe ALL users, tasks, streaks, completions, and audit logs in Firestore. Continue?")) return;
+            logDebug("Initiating full Firestore database wipe...");
+            try {
+                const famSnap = await db.collection('families').get();
+                const familyIds = new Set([DEFAULT_FAMILY_ID]);
+                famSnap.forEach(d => familyIds.add(d.id));
+
+                for (const fid of familyIds) {
+                    const fRef = db.collection('families').doc(fid);
+                    const mSnap = await fRef.collection('members').get();
+                    for (const m of mSnap.docs) await m.ref.delete();
+
+                    const tSnap = await fRef.collection('tasks').get();
+                    for (const t of tSnap.docs) await t.ref.delete();
+
+                    const sSnap = await fRef.collection('streaks').get();
+                    for (const s of sSnap.docs) {
+                        const cSnap = await s.ref.collection('completions').get();
+                        for (const c of cSnap.docs) await c.ref.delete();
+                        await s.ref.delete();
+                    }
+                    await fRef.delete();
+                }
+
+                const auditSnap = await db.collection('audit_logs').get();
+                for (const a of auditSnap.docs) await a.ref.delete();
+
+                logDebug("All Firestore collections wiped clean.");
+                alert("All Firestore databases have been reset!");
+                await loadGlobalDatabaseOverview();
+            } catch (e) {
+                logDebug(`DB Wipe Error: ${e.message}`, true);
+                alert("Error wiping DBs: " + e.message);
+            }
+        }
+
+        // ============================================================================
+        // FIX 5 — SINGLE DELEGATED EVENT LISTENER FOR ALL UI ACTIONS
+        // ============================================================================
+        document.addEventListener('click', e => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const action = target.dataset.action;
+
+            if (action === 'google-sign-in') {
+                triggerGoogleSignIn();
+            } else if (action === 'shield-clicked') {
+                handleShieldClick();
+            } else if (action === 'sign-out') {
+                if (session.isImpersonating) {
+                    alert('Exit Impersonation first before signing out.');
+                    return;
+                }
+                localStorage.clear();
+                auth.signOut();
+            } else if (action === 'exit-impersonation') {
+                exitInplaceImpersonation();
+            } else if (action === 'open-admin-portal') {
+                openSuperAdminGlobalModal();
+            } else if (action === 'switch-tab') {
+                switchTab(target.dataset.tab);
+            } else if (action === 'open-add-task') {
+                openAddTaskModal();
+            } else if (action === 'edit-task') {
+                openEditTaskModal(target.dataset.taskId);
+            } else if (action === 'delete-task') {
+                deleteTask(target.dataset.taskId);
+            } else if (action === 'toggle-task') {
+                toggleTask(target.dataset.taskId);
+            } else if (action === 'move-task-up') {
+                moveTaskOrder(target.dataset.taskId, -1);
+            } else if (action === 'move-task-down') {
+                moveTaskOrder(target.dataset.taskId, 1);
+            } else if (action === 'add-subtask') {
+                promptAddSubtask(target.dataset.taskId);
+            } else if (action === 'toggle-subtask') {
+                toggleSubtask(target.dataset.taskId, parseInt(target.dataset.subIdx, 10));
+            } else if (action === 'delete-subtask') {
+                deleteSubtask(target.dataset.taskId, parseInt(target.dataset.subIdx, 10));
+            } else if (action === 'reset-user-tasks') {
+                resetUserTasksToDefaults();
+            } else if (action === 'test-celebration') {
+                triggerCelebration();
+            } else if (action === 'test-notification') {
+                testAlarmAlert();
+            } else if (action === 'close-modals') {
+                closeModals();
+            } else if (action === 'save-global-config') {
+                saveGlobalBackendConfig();
+            } else if (action === 'impersonate-user') {
+                startInplaceImpersonation(target.dataset.uid, target.dataset.name, target.dataset.email);
+            } else if (action === 'admin-delete-user') {
+                adminDeleteSingleUser(target.dataset.uid, target.dataset.name);
+            } else if (action === 'nuke-all-dbs') {
+                wipeAllDatabasesGlobal();
+            } else if (action === 'copy-debug-logs') {
+                copyDebugLogs();
+            } else if (action === 'clear-debug-logs') {
+                document.getElementById('debugLogs').innerHTML = '';
+            } else if (action === 'hide-debug-console') {
+                document.getElementById('debugConsole').style.display = 'none';
+            }
+        });
+
+        document.getElementById('welcomeProvisionForm').addEventListener('submit', handleWelcomeProvision);
+        document.getElementById('taskForm').addEventListener('submit', handleSaveTaskForm);
+        document.getElementById('taskPhaseFilter').addEventListener('change', renderTasks);
+
+        function triggerCelebration() {
+            if (typeof confetti === 'function') confetti({ particleCount: 110, spread: 75, origin: { y: 0.6 } });
+            openModal('celebrationModal');
+        }
+
+        function detectPlatform() {
+            const ua = navigator.userAgent || '';
+            let p = "Desktop Browser"; let inst = "Click the install icon in your address bar to install.";
+            if (/android/i.test(ua)) { p = "Android Device"; inst = "Tap the 3-dot menu and select 'Add to Home screen'."; }
+            else if (/iPad|iPhone|iPod/.test(ua)) { p = "iPhone / iPad (iOS)"; inst = "Tap Share in Safari and select 'Add to Home Screen'."; }
+            document.getElementById('detectedPlatformInfo').innerText = `Detected: ${p}`;
+            document.getElementById('platformInstallInstructions').innerText = inst;
+        }
+
+        function switchTab(t) {
+            ['dashboard', 'streaks', 'info'].forEach(tab => {
+                document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.toggle('hidden', tab !== t);
+                const nav = document.getElementById('nav' + tab.charAt(0).toUpperCase() + tab.slice(1));
+                if (nav) nav.className = `px-2.5 py-1.5 rounded-lg text-xs font-semibold ${tab === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`;
+            });
+        }
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModals() { document.querySelectorAll('.fixed.inset-0').forEach(m => m.classList.add('hidden')); }
+        function testAlarmAlert() { if ("Notification" in window) Notification.requestPermission().then(p => { if (p === "granted") new Notification("🔔 Routine Alert", { body: "Notifications are active!" }); else alert("Permission denied."); }); }
+    </script>
+<div class="gtranslate_wrapper" style="position:fixed;right:12px;bottom:12px;z-index:9999;"></div>
+<script>window.gtranslateSettings = {"default_language":"en","detect_browser_language":true,"wrapper_selector":".gtranslate_wrapper"}</script>
+<script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
+</body>
+</html>

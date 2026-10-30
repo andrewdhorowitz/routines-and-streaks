@@ -1,0 +1,164 @@
+{
+  "edges": {
+    "admin->page": "opens + portal",
+    "deploy->page": "publishes (key injected)",
+    "page->admins": "reads own seat",
+    "page->audit": "appends; portal reads",
+    "page->authsvc": "Google sign-in",
+    "page->cache": "first-paint cache",
+    "page->gconfig": "subscribes",
+    "page->members": "profiles",
+    "page->streaks": "subscribe + transact",
+    "page->tasks": "subscribe + write",
+    "repo->deploy": "push triggers",
+    "reporter->errreports": "PROPOSED reports",
+    "seed->admins": "writes seats",
+    "user->page": "opens + signs in"
+  },
+  "footer_note": "Interactive rendering of the canonical v3 diagram in docs/architecture.md (same folder) — the Mermaid source there is the source of truth, and this rendering is generated from the same model. The Error Reporter and Error Reports store are PROPOSED (kit error-reporting standard, Phase 1) and are shaded grey in the source; they are not part of Version 1.",
+  "header_sub": "<b>Drag any box</b> to move it, <b>drag the background</b> to pan, <b>scroll / pinch buttons</b> to zoom, <b>click a box</b> for its details. Dragging explores the view — it does not change the canonical source (docs/architecture.md in this repo). Version 1 (test stage); the two grey boxes are PROPOSED (the error-reporting standard) and are not in Version 1.",
+  "nodes": {
+    "admin": {
+      "body": "Recognised by the Firestore admin registry at sign-in. Manages the global template, impersonation, and the danger zone.",
+      "host": "People",
+      "icon": "👤",
+      "k": "Person — owner",
+      "title": "Super Admin (owner)"
+    },
+    "admins": {
+      "body": "system_admins — Super Admin seats, one doc per user ID, enabled flag only. Managed solely from the Firebase Console or the seed script.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collection",
+      "title": "Admin Registry"
+    },
+    "audit": {
+      "body": "audit_logs — the append-only usage trail the app writes and the portal reads.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collection",
+      "title": "Audit Logs"
+    },
+    "authsvc": {
+      "body": "Google provider sign-in. Popup-first in the app, with a redirect fallback.",
+      "host": "Google Firebase",
+      "icon": "🗄️",
+      "k": "Server — hosted auth service",
+      "title": "Firebase Auth"
+    },
+    "cache": {
+      "body": "The last-seen streak value, kept on the device for an instant first paint. Firestore is the source of truth and overwrites it on every snapshot.",
+      "host": "User's device",
+      "icon": "🛢️",
+      "k": "Database — browser localStorage",
+      "title": "First-paint Streak Cache"
+    },
+    "deploy": {
+      "body": "On push to main: validates the page, injects the Firebase API key from the repo secret in place of the placeholder in index.html, and publishes to GitHub Pages. Companion checks: fleet CI, link check, Lighthouse.",
+      "host": "GitHub",
+      "icon": "⚙️",
+      "k": "Worker — GitHub Actions",
+      "title": "Deploy and CI Workflows"
+    },
+    "errreports": {
+      "body": "PROPOSED, not in Version 1: error_reports — create-only from clients, no public reads. The Firestore sink of the proposed Error Reporter.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collection (PROPOSED)",
+      "title": "Error Reports (PROPOSED)"
+    },
+    "gconfig": {
+      "body": "global_config/system_defaults — the default-task template and the early check-off buffer. Read by provisioning, reset, and the portal.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore document",
+      "title": "Global Config"
+    },
+    "members": {
+      "body": "families/default/members — one profile doc per signed-in user, under the single invisible default family.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collection",
+      "title": "Members"
+    },
+    "page": {
+      "body": "The entire app in one file: boot, auth, provisioning, realtime sync, task UI, streak engine, admin portal, and cross-cutting services — all running in the visitor's browser.",
+      "host": "GitHub Pages",
+      "icon": "🪟",
+      "k": "UI screen — static HTML / JS",
+      "title": "Web App (index.html)"
+    },
+    "repo": {
+      "body": "Canonical source: the single-file app, the spec, and this diagram. Public showroom repo; full history lives in a private archive repo.",
+      "host": "GitHub",
+      "icon": "📦",
+      "k": "Repo — source store",
+      "title": "Routines & Streaks Repo"
+    },
+    "reporter": {
+      "body": "PROPOSED, not in Version 1: one funnel every failure passes through. Classifies by effect into tiers and hands a minimal report to a pluggable sink.",
+      "host": "GitHub Pages",
+      "icon": "⚙️",
+      "k": "Worker — in-page module (PROPOSED)",
+      "title": "Error Reporter (PROPOSED)"
+    },
+    "seed": {
+      "body": "scripts/seed-admin.mjs — grants or revokes Super Admin seats in the registry. Owner-run; the app itself can never write the registry.",
+      "host": "Owner's workstation",
+      "icon": "⚙️",
+      "k": "Worker — Node script (Admin SDK)",
+      "title": "Seed Admin Script"
+    },
+    "streaks": {
+      "body": "families/default/streaks — counters per user, plus one completion-proof doc per finished cycle so a cycle can never count twice.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collections",
+      "title": "Streaks and Completions"
+    },
+    "tasks": {
+      "body": "families/default/tasks — routine tasks, owner-scoped: the app queries by ownerId and stamps each task with its cycle.",
+      "host": "Google Firebase",
+      "icon": "🛢️",
+      "k": "Database — Firestore collection",
+      "title": "Tasks"
+    },
+    "user": {
+      "body": "Signs in with Google and runs the daily routine: evening and morning tasks, check-offs, and the streak. Test stage: the owner and testers.",
+      "host": "People",
+      "icon": "👤",
+      "k": "Person — signed-in user",
+      "title": "User"
+    }
+  },
+  "panel_body": "One static file does everything: the <b>page</b> is served by GitHub Pages and runs in the visitor's browser, <b>Firebase Auth</b> signs users in, and <b>Firestore</b> holds every store as cylinders. The <b>deploy workflow</b> is a gear on GitHub Actions; the <b>seed script</b> is a gear on the owner's workstation. Click any box for its job.",
+  "project": "Routines & Streaks",
+  "zones": {
+    "device": {
+      "sub": "Any modern browser",
+      "title": "User's device"
+    },
+    "github": {
+      "sub": "Repo, Actions, and Pages hosting",
+      "title": "GitHub"
+    },
+    "google": {
+      "sub": "Hosted auth and database",
+      "title": "Google Firebase"
+    },
+    "ownerpc": {
+      "sub": "Owner-run tooling",
+      "title": "Owner's workstation"
+    }
+  },
+  "folded_elements": [
+    "boot",
+    "auth",
+    "prov",
+    "sync",
+    "taskui",
+    "streak",
+    "portal",
+    "cross"
+  ]
+}

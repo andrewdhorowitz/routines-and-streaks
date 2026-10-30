@@ -1,0 +1,18 @@
+# Dependabot — keeps GitHub Actions versions current so they don't rot.
+# This app has no package.json / npm dependencies; the Actions themselves
+# (checkout, configure-pages, upload-pages-artifact, deploy-pages) are the
+# only moving parts that get security and compatibility updates.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"

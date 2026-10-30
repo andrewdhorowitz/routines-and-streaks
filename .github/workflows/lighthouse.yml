@@ -1,0 +1,35 @@
+# Lighthouse — thin caller for the shared fleet Lighthouse audit
+# (kit v3.7).
+# The audit machinery (Lighthouse CI, report-only) lives in the
+# public fleet-ci repo as a reusable workflow; this file only
+# points at it and passes the one thing that differs per repo —
+# the urls input below — so a kit fix lands once, centrally, and
+# this repo picks it up on its next scheduled run. The triggers
+# are unchanged from the standalone file this replaces: weekly
+# schedule plus manual dispatch. Report-only: this workflow never
+# fails a build.
+# This repo's page: the app's GitHub Pages address. The app sits
+# behind Firebase sign-in, so the audit measures the SIGNED-OUT
+# landing page only — load performance and markup of the login
+# screen, never the signed-in app. Still a useful trend line;
+# read it as such.
+# Installed to .github/workflows/lighthouse.yml by update-ci.sh
+# (until then it travels in this repo at ci-src/lighthouse.yml —
+# the Muse GitHub App cannot push files under .github/workflows/;
+# the repo owner can).
+name: Lighthouse
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-lighthouse:
+    uses: andrewdhorowitz/fleet-ci/.github/workflows/fleet-lighthouse.yml@main
+    with:
+      urls: |
+        https://routines.andrewdhorowitz.com/

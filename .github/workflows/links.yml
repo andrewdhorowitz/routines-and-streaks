@@ -1,0 +1,27 @@
+# Links — thin caller for the shared fleet link check (kit v3.7).
+# The check itself (lychee over the repo's Markdown files) lives in
+# the public fleet-ci repo as a reusable workflow; this file only
+# points at it, so a kit fix lands once, centrally, and this repo
+# picks it up on its next scheduled run. There are no jobs to edit
+# here and no inputs — the check is identical in every repo.
+# The triggers are unchanged from the standalone file this
+# replaces: weekly schedule plus manual dispatch, BY DESIGN — it
+# never runs on push or PR, so a rotten external link can't block
+# work; the weekly run failing visibly is the rot alarm.
+# Installed to .github/workflows/links.yml by update-ci.sh (until
+# then it travels in this repo at ci-src/links.yml — the Muse
+# GitHub App cannot push files under .github/workflows/; the repo
+# owner can).
+name: Links
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 14 * * 1" # Mondays 14:30 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-links:
+    uses: andrewdhorowitz/fleet-ci/.github/workflows/fleet-links.yml@main

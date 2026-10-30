@@ -1,0 +1,89 @@
+# CI — thin caller for the shared fleet workflow (kit v3.6;
+# host re-pointed in v3.6.1), plus this repo's own App guardrails
+# job, which stays local (below).
+# The baseline checks (Python / Web / actionlint) live in the
+# public fleet-ci repo as a reusable workflow; the fleet-ci job
+# here only points at them, so a kit CI fix lands once, centrally,
+# and this repo picks it up on its next run. (The host repo is
+# public because GitHub lets a public repository call only
+# public-hosted reusable workflows; the v3.6 caller pointed at
+# the private template repo and could not run.)
+# Installed to .github/workflows/ci.yml by update-ci.sh (until then
+# it travels in this repo at ci-src/ci.yml — the Muse GitHub App
+# cannot push files under .github/workflows/; the repo owner can).
+#
+# Notes on the former adapted variant (standard pass, 2026-10-29):
+#  1. The Web job's respect for this repo's .htmlvalidate.json is
+#     now CENTRAL behavior (kit v3.6): the reusable writes the stock
+#     config only when the repo carries none, so this repo's tuned
+#     config (recommended minus four rules) is used as-is.
+#  2. The guardrails job remains repo-local: its checks are specific
+#     to this app's deploy design and have no kit equivalent.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-ci:
+    uses: andrewdhorowitz/fleet-ci/.github/workflows/fleet-ci.yml@main
+    with:
+      py_files: "app.py main.py"
+
+  guardrails:
+    name: App guardrails — Firebase key hygiene + truncation
+    runs-on: ubuntu-latest
+    # Carried over from validate.yml when ci.yml superseded it
+    # (standard pass, 2026-10-29). These checks are specific to this
+    # app's deploy design and have no kit equivalent:
+    #  1. A real-looking Google API key must never be committed in
+    #     index.html (the incident of Oct 25, 2026 — keys belong in
+    #     the FIREBASE_API_KEY repo secret, injected at deploy time
+    #     by deploy.yml, never in source).
+    #  2. The __FIREBASE_API_KEY__ placeholder must stay present in
+    #     index.html — deploy.yml injects the real key by replacing
+    #     it, and fails without it.
+    #  3. index.html must not be truncated (size floor + closing
+    #     tag). Full parse validation lives in the Web job.
+    # The scans deliberately target ONLY index.html: workflow files
+    # and SPEC.md legitimately mention key patterns in prose and
+    # must not self-trigger.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check for a committed Google API key
+        run: |
+          # Real Google API keys are "AIza" + ~35 chars from this set.
+          if grep -Eq 'AIza[0-9A-Za-z_-]{30,}' index.html; then
+            echo "::error::A real-looking Google API key was found in index.html. Remove it and use the __FIREBASE_API_KEY__ placeholder instead."
+            exit 1
+          fi
+          echo "OK: no committed API key in index.html."
+      - name: Check the Firebase placeholder is present
+        run: |
+          if ! grep -q '__FIREBASE_API_KEY__' index.html; then
+            echo "::error::index.html is missing the __FIREBASE_API_KEY__ placeholder — deploy.yml cannot inject the key without it."
+            exit 1
+          fi
+          echo "OK: __FIREBASE_API_KEY__ placeholder present."
+      - name: Check index.html is not truncated
+        run: |
+          python3 - << 'EOF'
+          import pathlib, sys
+          path = pathlib.Path("index.html")
+          if not path.exists():
+              print("::error::index.html is missing.")
+              sys.exit(1)
+          text = path.read_text(encoding="utf-8", errors="replace")
+          if len(text) < 10000:
+              print(f"::error::index.html is only {len(text)} chars — looks truncated (expected 50k+).")
+              sys.exit(1)
+          if "</html>" not in text:
+              print("::error::index.html has no closing </html> tag — looks truncated.")
+              sys.exit(1)
+          print(f"OK: index.html intact, {len(text)} chars.")
+          EOF
