@@ -7,6 +7,7 @@
     "interactive": "https://routines.andrewdhorowitz.com/docs/interactive-architecture.html",
     "site": "https://routines.andrewdhorowitz.com/"
   },
+  "release_state": "testing",
   "section": {
     "blurb": "Routines and streaks web app \u2014 daily routines on a noon cycle, persistent streaks, Google sign-in.",
     "family_visible": false,
