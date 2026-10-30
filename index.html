@@ -47,6 +47,12 @@
 
     <main class="max-w-md mx-auto p-4 space-y-4">
 
+        <!-- Demo Mode Banner (visible only in demo mode) -->
+        <div id="demoBanner" class="hidden bg-amber-400 text-amber-950 p-3 rounded-2xl shadow flex items-center justify-between">
+            <span class="text-xs font-bold"><i class="fa-solid fa-eye mr-1"></i> Demo mode — nothing is saved</span>
+            <button type="button" data-action="demo-sign-in" class="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow">Sign in</button>
+        </div>
+
         <!-- Onboarding / Auth Section (Phase 1: Google Sign-In Only + Welcome Provisioning) -->
         <div id="authSection" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
             <div id="googleSignInView" class="space-y-4">
@@ -56,6 +62,16 @@
                     <i class="fa-brands fa-google text-red-400 text-base"></i>
                     <span>Continue with Google</span>
                 </button>
+                <div class="flex items-center space-x-2">
+                    <span class="flex-1 border-t border-slate-100"></span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">or</span>
+                    <span class="flex-1 border-t border-slate-100"></span>
+                </div>
+                <button type="button" data-action="try-demo" class="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 py-3 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-play text-blue-600 text-base"></i>
+                    <span>Try the demo</span>
+                </button>
+                <p class="text-[11px] text-slate-400 text-center">Explore a sample routine — no sign-in, nothing is saved.</p>
                 <div class="pt-2 border-t border-slate-100 text-center">
                     <button type="button" data-action="shield-clicked" class="text-[11px] text-amber-700 hover:text-amber-800 font-bold">
                         <i class="fa-solid fa-shield-halved mr-1"></i> Super Admin Sign-In
@@ -326,6 +342,18 @@
             { title: 'Morning launch & ready on time', reminder: '06:45', deadline: '07:15', order: 2, subtasks: [] }
         ];
 
+        // Demo mode sample set: a believable morning routine, rendered from page
+        // memory only. Never written to Firestore (see the DEMO MODE section).
+        const DEMO_TASKS = [
+            { id: 'demo_task_1', ownerId: 'demo', title: 'Wake up & make the bed', reminder: '06:30', deadline: '06:45', order: 0, done: false, subtasks: [{ title: 'Open the curtains', done: false }] },
+            { id: 'demo_task_2', ownerId: 'demo', title: 'Brush teeth & wash face', reminder: '06:40', deadline: '06:55', order: 1, done: false, subtasks: [] },
+            { id: 'demo_task_3', ownerId: 'demo', title: 'Eat a real breakfast', reminder: '07:00', deadline: '07:20', order: 2, done: false, subtasks: [{ title: 'Drink a glass of water', done: false }] },
+            { id: 'demo_task_4', ownerId: 'demo', title: 'Take morning medication', reminder: '07:10', deadline: '07:25', order: 3, done: false, subtasks: [] },
+            { id: 'demo_task_5', ownerId: 'demo', title: 'Get dressed for the day', reminder: '07:20', deadline: '07:35', order: 4, done: false, subtasks: [] },
+            { id: 'demo_task_6', ownerId: 'demo', title: 'Pack bag & check today\'s calendar', reminder: '07:30', deadline: '07:45', order: 5, done: false, subtasks: [{ title: 'Phone, keys, wallet', done: false }] },
+            { id: 'demo_task_7', ownerId: 'demo', title: 'Morning stretch or short walk', reminder: '07:45', deadline: '08:05', order: 6, done: false, subtasks: [] }
+        ];
+
         function logDebug(msg, err = false) {
             const logsEl = document.getElementById('debugLogs');
             if (logsEl) {
@@ -391,6 +419,8 @@
 
         let tasks = [];
         let completionHistory = [];
+        let demoMode = false;
+        let demoCycleCredited = false;
         let allRegisteredMembers = [];
         let tasksUnsub = null;
         let streakUnsub = null;
@@ -545,6 +575,7 @@
         auth.onAuthStateChanged(async user => {
             teardownUserListeners();
             if (!user) {
+                if (demoMode) { renderAppState(); return; }
                 session = { uid: '', email: '', userName: '', role: 'new', earlyBuffer: 60, currentStreak: 0, longestStreak: 0, totalCompletedCycles: 0, isImpersonating: false, originalAdminSession: null };
                 document.getElementById('debugConsole').style.display = 'none';
                 logDebug('No signed-in user. Showing Google Sign-In screen.');
@@ -720,10 +751,65 @@
         }
 
         // ============================================================================
+        // DEMO MODE — the full checklist in the browser only: built-in sample
+        // tasks, state held in page memory, ZERO Firestore reads/writes, no
+        // auth, no provisioning. Signed-in code paths are untouched — every
+        // demo branch in the mutating functions returns before any db call.
+        // ============================================================================
+        function freshDemoTasks() {
+            return DEMO_TASKS.map(t => ({
+                ...t,
+                cycleId: cycleIdFor(),
+                subtasks: (t.subtasks || []).map(s => ({ title: s.title, done: false }))
+            }));
+        }
+
+        function enterDemo() {
+            demoMode = true;
+            demoCycleCredited = false;
+            session = { uid: 'demo', email: '', userName: 'Demo Guest', role: 'user', earlyBuffer: 60, currentStreak: 3, longestStreak: 7, totalCompletedCycles: 5, isImpersonating: false, originalAdminSession: null };
+            tasks = freshDemoTasks();
+            completionHistory = [{ cycleId: addDays(cycleIdFor(), -1), taskCount: DEMO_TASKS.length, taskTitles: DEMO_TASKS.map(t => t.title) }];
+            logDebug('Entered demo mode (sample data, page memory only).');
+            renderAppState();
+        }
+
+        function exitDemo() {
+            demoMode = false;
+            demoCycleCredited = false;
+            teardownUserListeners();
+            session = { uid: '', email: '', userName: '', role: 'new', earlyBuffer: 60, currentStreak: 0, longestStreak: 0, totalCompletedCycles: 0, isImpersonating: false, originalAdminSession: null };
+            completionHistory = [];
+            renderAppState();
+        }
+
+        function demoSignIn() {
+            exitDemo();
+            triggerGoogleSignIn();
+        }
+
+        // Demo streak bookkeeping — the in-memory mirror of evaluateMemberStreak.
+        function evaluateDemoCompletion() {
+            if (!demoMode) return;
+            if (tasks.length === 0 || !tasks.every(x => x.done)) return;
+            if (!demoCycleCredited) {
+                demoCycleCredited = true;
+                session.currentStreak += 1;
+                session.longestStreak = Math.max(session.longestStreak, session.currentStreak);
+                session.totalCompletedCycles += 1;
+                completionHistory = [{ cycleId: cycleIdFor(), taskCount: tasks.length, taskTitles: tasks.map(t => t.title) }, ...completionHistory];
+                updateStreakUI(session.currentStreak, session.longestStreak, session.totalCompletedCycles);
+                renderCompletionHistory();
+            }
+            triggerCelebration();
+        }
+
+        // ============================================================================
         // UI STATE & ROUTING
         // ============================================================================
         function renderAppState() {
             detectPlatform();
+            document.getElementById('demoBanner').classList.toggle('hidden', !demoMode);
             const isUnauthed = (!session.uid || session.role === 'new');
             const isPureAdmin = (session.role === 'admin' && !session.isImpersonating);
 
@@ -785,7 +871,7 @@
             document.getElementById('userNameDisplay').innerText = session.userName;
             document.getElementById('userRoleBadge').innerText = session.isImpersonating
                 ? `IMPERSONATING: ${session.userName}`
-                : (isPureAdmin ? 'SUPER ADMIN + SOLO ROUTINE' : 'SOLO MODE');
+                : (isPureAdmin ? 'SUPER ADMIN + SOLO ROUTINE' : (demoMode ? 'DEMO MODE' : 'SOLO MODE'));
             document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
             document.getElementById('cycleWindows').innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
 
@@ -797,7 +883,14 @@
             }
 
             switchTab('dashboard');
-            initUserRealtimeSync(session.uid);
+            if (demoMode) {
+                // Demo: render the in-memory sample state; no Firestore listeners.
+                updateStreakUI(session.currentStreak, session.longestStreak, session.totalCompletedCycles);
+                renderTasks();
+                renderCompletionHistory();
+            } else {
+                initUserRealtimeSync(session.uid);
+            }
         }
 
         // ============================================================================
@@ -1010,7 +1103,7 @@
 
             // FIX 4: Phase-aware early check-off window check (Super Admin non-impersonating is exempt; regular users & impersonated users are checked)
             const isExempt = (session.role === 'admin' && !session.isImpersonating);
-            if (!t.done && !isExempt && session.earlyBuffer < 1440) {
+            if (!demoMode && !t.done && !isExempt && session.earlyBuffer < 1440) {
                 const remDT = reminderDateTime(t, currentCycle);
                 const openDT = new Date(remDT.getTime() - session.earlyBuffer * 60000);
                 const now = new Date();
@@ -1027,6 +1120,12 @@
             t.done = newDone;
             t.cycleId = currentCycle;
 
+            if (demoMode) {
+                renderTasks();
+                evaluateDemoCompletion();
+                return;
+            }
+
             await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(t.id).update({
                 done: newDone,
                 cycleId: currentCycle
@@ -1040,7 +1139,7 @@
         }
 
         async function evaluateMemberStreak(uid) {
-            if (!uid) return false;
+            if (demoMode || !uid) return false;
             const userMainTasks = tasks.filter(t => t.ownerId === uid);
             if (userMainTasks.length === 0) return false;
 
@@ -1144,6 +1243,19 @@
             const rawSubs = document.getElementById('newSubtasks').value;
             const subtasks = rawSubs ? rawSubs.split(',').map(s => s.trim()).filter(Boolean).map(s => ({ title: s, done: false })) : [];
 
+            if (demoMode) {
+                if (editId) {
+                    const existing = tasks.find(x => x.id === editId);
+                    if (existing) { existing.title = title; existing.reminder = reminder; existing.deadline = deadline; existing.subtasks = subtasks; }
+                } else {
+                    const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order ?? 0)) + 1 : 0;
+                    tasks.push({ id: generateSecureId('task_'), ownerId: 'demo', title, reminder, deadline, order: nextOrder, done: false, cycleId: cycleIdFor(), subtasks });
+                }
+                closeModals();
+                renderTasks();
+                return;
+            }
+
             const tasksCol = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks');
 
             if (editId) {
@@ -1172,6 +1284,7 @@
             const t = tasks.find(x => x.id === taskId);
             if (!t) return;
             if (!confirm(`Delete task "${t.title}"?`)) return;
+            if (demoMode) { tasks = tasks.filter(x => x.id !== taskId); renderTasks(); return; }
             await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).delete();
             logUsage('Task Deleted', t.title);
         }
@@ -1181,6 +1294,16 @@
             if (idx < 0) return;
             const swapIdx = idx + direction;
             if (swapIdx < 0 || swapIdx >= tasks.length) return;
+
+            if (demoMode) {
+                tasks.forEach((t, i) => { t.order = i; });
+                const demoTempOrder = tasks[idx].order;
+                tasks[idx].order = tasks[swapIdx].order;
+                tasks[swapIdx].order = demoTempOrder;
+                tasks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                renderTasks();
+                return;
+            }
 
             const batch = db.batch();
             const tasksCol = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks');
@@ -1200,6 +1323,7 @@
             const t = tasks.find(x => x.id === taskId);
             if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
             t.subtasks[subIdx].done = !t.subtasks[subIdx].done;
+            if (demoMode) { renderTasks(); return; }
             await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
         }
 
@@ -1207,6 +1331,7 @@
             const t = tasks.find(x => x.id === taskId);
             if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
             t.subtasks.splice(subIdx, 1);
+            if (demoMode) { renderTasks(); return; }
             await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
         }
 
@@ -1217,6 +1342,7 @@
             if (!t) return;
             const updated = Array.isArray(t.subtasks) ? [...t.subtasks] : [];
             updated.push({ title: subTitle.trim(), done: false });
+            if (demoMode) { t.subtasks = updated; renderTasks(); return; }
             await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: updated });
         }
 
@@ -1224,6 +1350,13 @@
         async function resetUserTasksToDefaults() {
             if (!session.uid) return;
             if (!confirm("Reset your tasks to the system default template for the current cycle? This replaces your custom edits and clears today's completion proof so you can re-earn it.")) return;
+
+            if (demoMode) {
+                tasks = freshDemoTasks();
+                demoCycleCredited = false;
+                renderTasks();
+                return;
+            }
 
             const uid = session.uid;
             const currentCycle = cycleIdFor();
@@ -1289,6 +1422,7 @@
         // ============================================================================
         function handleShieldClick() {
             if (isBlockedByImpersonationGuard('handleShieldClick')) return;
+            if (demoMode) { showUserError('The Super Admin portal is not part of the demo — sign in to explore the full app.'); return; }
             if (session.role === 'admin') {
                 openSuperAdminGlobalModal();
             } else if (session.uid) {
@@ -1447,9 +1581,17 @@
 
             if (action === 'google-sign-in') {
                 triggerGoogleSignIn();
+            } else if (action === 'try-demo') {
+                enterDemo();
+            } else if (action === 'demo-sign-in') {
+                demoSignIn();
             } else if (action === 'shield-clicked') {
                 handleShieldClick();
             } else if (action === 'sign-out') {
+                if (demoMode) {
+                    exitDemo();
+                    return;
+                }
                 if (session.isImpersonating) {
                     alert('Exit Impersonation first before signing out.');
                     return;
