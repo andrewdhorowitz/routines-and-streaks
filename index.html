@@ -1373,6 +1373,9 @@
                 try {
                     await auth.signInWithRedirect(provider);
                 } catch (re) {
+                    // S6: both sign-in paths have now failed — terminal for
+                    // this attempt (Tier 2).
+                    reportError(re, { area: 'auth', operation: 'sign-in-redirect-fallback', recovered: false, sessionDead: true });
                     logDebug(`Redirect fallback failed (${re.code || 'unknown'}): ${re.message}`, true);
                     showUserError(`Sign-in failed (${re.code || 'unknown error'}): ${re.message} Please try again.`);
                 }
@@ -1380,6 +1383,8 @@
             const watchdog = setTimeout(() => {
                 if (popupSettled || redirectStarted) return;
                 logDebug('Popup watchdog: no settle within 10s. Treating as hung.', true);
+                // S5: the watchdog's finding used to live only in that log line.
+                reportError({ code: 'watchdog-fired' }, { area: 'auth', operation: 'sign-in-watchdog', recovered: 'pending', watchdogFired: true });
                 startRedirectFallback("Popup sign-in isn't responding. Trying the full-page sign-in instead...");
             }, 10000);
             try {
@@ -1393,6 +1398,16 @@
             } catch (e) {
                 popupSettled = true;
                 clearTimeout(watchdog);
+                // S4: capture the raw code through the funnel BEFORE any friendly
+                // translation or fallback decision. Deliberate cancels
+                // (popup-closed-by-user, cancelled-popup-request) are drop-class
+                // in the tier table — never sent, never consume throttle.
+                reportError(e, { area: 'auth', operation: 'sign-in-popup', recovered: 'pending' });
+                if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/network-request-failed')) {
+                    // The redirect fallback is the designed recovery for these;
+                    // S7 closes the pending attempt if it completes.
+                    try { sessionStorage.setItem('pending_signin_attempt', JSON.stringify({ operation: 'sign-in-popup', code: e.code })); } catch (ignored) {}
+                }
                 logDebug(`Popup notice (${e.code || 'unknown'}): ${e.message}`, true);
                 if (redirectStarted) return;
                 if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
@@ -1411,13 +1426,49 @@
         auth.getRedirectResult().then(res => {
             if (res && res.user) {
                 logDebug('Redirect sign-in completed.');
+                // S7: close a pending S4 attempt, if one is marked — the same
+                // code with recovered:true (Tier 0). No marker means a plain
+                // successful sign-in, which is not an event.
+                try {
+                    const marker = sessionStorage.getItem('pending_signin_attempt');
+                    if (marker) {
+                        sessionStorage.removeItem('pending_signin_attempt');
+                        const parsed = JSON.parse(marker);
+                        if (parsed && typeof parsed.code === 'string') {
+                            reportError({ code: parsed.code }, { area: 'auth', operation: 'sign-in-redirect-result', recovered: true });
+                        }
+                    }
+                } catch (ignored) {}
             }
         }).catch(e => {
+            // S7: a rejected redirect result leaves the user signed out with
+            // no path forward in the app — Tier 2 (the table for config-class
+            // codes, canContinue:false for the rest).
+            reportError(e, { area: 'auth', operation: 'sign-in-redirect-result', recovered: false, canContinue: false });
+            try { sessionStorage.removeItem('pending_signin_attempt'); } catch (ignored) {}
             logDebug(`Redirect Auth Error (${e.code || 'unknown'}): ${e.message}`, true);
             showUserError(`Sign-in did not finish (${e.code || 'unknown error'}): ${e.message} Please try signing in again.`);
         });
 
+        // S8: the auth-state callback is a shell. An escaping throw used to
+        // dead-end the session silently (or as a half-rendered shell); inner
+        // sites keep their own handling and this catch is the last resort,
+        // reporting the phase that died (phase rides ctx as context — the
+        // event shape itself is fixed). The profile-load banner it shows is
+        // the same one the inner catch uses.
+        let authPhase = 'registry-check';
+        let roleResolution = 'user';
         auth.onAuthStateChanged(async user => {
+            authPhase = 'registry-check';
+            try {
+                await handleAuthStateChanged(user);
+            } catch (e) {
+                reportError(e, { area: 'auth', operation: 'auth-state-callback', recovered: false, sessionDead: true, phase: authPhase });
+                showUserError('We could not load your profile. Please check your connection and refresh the page.');
+            }
+        });
+
+        async function handleAuthStateChanged(user) {
             teardownUserListeners();
             if (!user) {
                 if (demoMode) { renderAppState(); return; }
@@ -1434,19 +1485,45 @@
             // Phase 1.1 (#17): admin status comes from the system_admins registry —
             // the same record the Firestore rules enforce. The rules let every
             // signed-in user read their OWN registry entry; no entry = not an admin.
+            authPhase = 'registry-check';
             let isSuperAdmin = false;
             try {
                 const adminSnap = await db.collection('system_admins').doc(user.uid).get();
                 isSuperAdmin = adminSnap.exists && adminSnap.data().enabled === true;
+                roleResolution = isSuperAdmin ? 'admin' : 'user';
             } catch (e) {
                 logDebug(`Admin registry check failed: ${e.message}`, true);
+                // S9: a failed registry check silently demotes an admin into
+                // the regular-user flow (isSuperAdmin stays false) — record it
+                // with the defaulted role so the log can see it. The user sees
+                // no change in Phase 1. permission-denied is Tier 2 here: the
+                // admin surface is dead even though the session lives, so
+                // canContinue:false is scoped to admin continuation (the
+                // inventory's own tiering for this site); other codes Tier 1.
+                roleResolution = 'user-by-default-after-error';
+                if (e && e.code === 'permission-denied') {
+                    reportError(e, { area: 'auth', operation: 'admin-registry-check', recovered: false, canContinue: false, roleResolved: roleResolution });
+                } else {
+                    reportError(e, { area: 'auth', operation: 'admin-registry-check', recovered: false, canContinue: true, roleResolved: roleResolution });
+                }
             }
             session.uid = user.uid;
             session.email = user.email || '';
 
+            authPhase = 'profile-load';
             try {
                 const memRef = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('members').doc(user.uid);
-                const memDoc = await memRef.get();
+                // S10: the one big catch is split into instrumented sub-steps.
+                // Each reports its own raw code, then rethrows into the
+                // existing banner path below — visible behavior unchanged, but
+                // the log can finally tell the three failures apart.
+                let memDoc;
+                try {
+                    memDoc = await memRef.get();
+                } catch (e) {
+                    reportError(e, { area: 'auth', operation: 'profile-read', recovered: false, sessionDead: true });
+                    throw e;
+                }
 
                 if (isSuperAdmin) {
                     document.getElementById('debugConsole').style.display = '';
@@ -1458,13 +1535,27 @@
                     // Auto-provision Super Admin's personal Solo Mode profile & starter tasks if not yet created
                     if (!memDoc.exists) {
                         logDebug('Auto-provisioning Super Admin personal Solo Mode profile & tasks...');
-                        await provisionUserBatch(user.uid, session.userName, session.email, 'admin');
+                        try {
+                            await provisionUserBatch(user.uid, session.userName, session.email, 'admin');
+                        } catch (e) {
+                            reportError(e, { area: 'auth', operation: 'admin-provision', recovered: false, canContinue: false });
+                            throw e;
+                        }
                     } else {
                         const syncFields = { lastActive: firebase.firestore.FieldValue.serverTimestamp() };
                         if (memDoc.data().role !== 'admin') syncFields.role = 'admin';
-                        await memRef.set(syncFields, { merge: true });
+                        try {
+                            await memRef.set(syncFields, { merge: true });
+                        } catch (e) {
+                            // S10 (lastactive-sync): recorded at its true tier
+                            // (Tier 1 class). The abort-the-callback behavior
+                            // is deliberately NOT changed by Phase 1.
+                            reportError(e, { area: 'auth', operation: 'lastactive-sync', recovered: false });
+                            throw e;
+                        }
                     }
                     logUsage('Super Admin Login', user.email);
+                    authPhase = 'render';
                     renderAppState();
                     return;
                 }
@@ -1481,14 +1572,20 @@
                     const data = memDoc.data();
                     session.userName = data.name || user.displayName || 'User';
                     session.role = 'user';
-                    await memRef.set({ lastActive: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    try {
+                        await memRef.set({ lastActive: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    } catch (e) {
+                        reportError(e, { area: 'auth', operation: 'lastactive-sync', recovered: false });
+                        throw e;
+                    }
+                    authPhase = 'render';
                     renderAppState();
                 }
             } catch (e) {
                 logDebug(`Profile lookup error: ${e.message}`, true);
                 showUserError('We could not load your profile. Please check your connection and refresh the page.');
             }
-        });
+        }
 
         // ============================================================================
         // P4 — PROVISIONING (First Sign-In, ONE Batched Write)
@@ -1502,6 +1599,9 @@
                     template = cfgDoc.data().defaultTasks;
                 }
             } catch (e) {
+                // S12: the fallback template self-heals the provisioning —
+                // report it as what it is (Tier 0), with the template source.
+                reportError(e, { area: 'tasks', operation: 'provision-template-read', recovered: true, templateSource: 'fallback' });
                 logDebug(`Using fallback default tasks: ${e.message}`);
             }
 
@@ -1546,7 +1646,16 @@
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            await batch.commit();
+            // S13: a failed commit means no profile and no app for this
+            // user — Tier 2 by effect. Report (role, template source, and
+            // task count ride ctx as classification context), then rethrow
+            // to the existing caller surfaces (S10/S14).
+            try {
+                await batch.commit();
+            } catch (e) {
+                reportError(e, { area: 'auth', operation: 'provision-batch', recovered: false, canContinue: false, role: roleStr, templateSource: template === FALLBACK_DEFAULT_TASKS ? 'fallback' : 'firestore', taskCount: template.length });
+                throw e;
+            }
         }
 
         async function handleWelcomeProvision(e) {
@@ -1565,8 +1674,12 @@
                 logUsage('User Provisioned', `${confirmedName} (${uid})`);
                 renderAppState();
             } catch (err) {
+                // S14: the blocking alert() with a raw message is replaced by
+                // the funnel plus the #20 banner (S13 already reported the
+                // batch itself; this call names the Welcome surface).
+                reportError(err, { area: 'auth', operation: 'welcome-provision', recovered: false, canContinue: false });
                 logDebug(`Provisioning failed: ${err.message}`, true);
-                alert('Error provisioning profile: ' + err.message);
+                showUserError(friendlyError(err, 'We could not finish setting up your profile. Please check your connection and try again.'));
             }
         }
 
@@ -2444,7 +2557,10 @@
                     return;
                 }
                 localStorage.clear();
-                auth.signOut();
+                // S11: a failed sign-out on a shared device is
+                // privacy-relevant — record it. (A banner for it is a
+                // product call Phase 1 does not take.)
+                auth.signOut().catch(e => reportError(e, { area: 'auth', operation: 'sign-out' }));
             } else if (action === 'exit-impersonation') {
                 exitInplaceImpersonation();
             } else if (action === 'open-admin-portal') {
