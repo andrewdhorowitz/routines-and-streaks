@@ -8,6 +8,50 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#ffffff">
+    <!-- BOOT NET (Error Reporting Phase 1, S1/S2): dependency-free, runs before
+         every CDN script. If a CDN script dies or Firebase init never completes,
+         no in-page code can report it, so this snippet stashes a minimal
+         {code, resource-class, ts} record in localStorage (cap 5); the main
+         script drains the stash through the error reporter once configured.
+         It also arms a 15s boot timer for the same purpose. Never throws. -->
+    <script>
+    (function () {
+        try {
+            var STASH_KEY = 'pending_error_reports';
+            var booted = false;
+            var handedOff = false;
+            function stash(entry) {
+                try {
+                    var arr = [];
+                    try { arr = JSON.parse(localStorage.getItem(STASH_KEY) || '[]'); } catch (e) { arr = []; }
+                    if (!Array.isArray(arr)) arr = [];
+                    arr.push(entry);
+                    while (arr.length > 5) arr.shift();
+                    localStorage.setItem(STASH_KEY, JSON.stringify(arr));
+                } catch (e) { /* storage blocked: the stash is best-effort by design */ }
+            }
+            var timer = setTimeout(function () {
+                if (!booted && !handedOff) stash({ code: 'boot-timeout', resourceClass: 'boot', ts: Date.now() });
+            }, 15000);
+            window.__bootNetMarkBooted = function () { booted = true; try { clearTimeout(timer); } catch (e) {} };
+            window.__bootNetHandoff = function () { handedOff = true; try { clearTimeout(timer); } catch (e) {} };
+            window.addEventListener('error', function (e) {
+                try {
+                    if (handedOff || !e || !e.target || e.target === window) return;
+                    var el = e.target;
+                    var url = (typeof el.src === 'string' && el.src) || (typeof el.href === 'string' && el.href) || '';
+                    if (!url) return;
+                    var cls = 'other';
+                    if (url.indexOf('gstatic.com') !== -1) cls = 'firebase-cdn';
+                    else if (url.indexOf('cdn.tailwindcss.com') !== -1) cls = 'tailwind-cdn';
+                    else if (url.indexOf('jsdelivr.net') !== -1) cls = 'confetti-cdn';
+                    else if (url.indexOf('cdnjs.cloudflare.com') !== -1) cls = 'fontawesome-cdn';
+                    stash({ code: 'resource-error', resourceClass: cls, ts: Date.now() });
+                } catch (err) { /* the boot net must never throw */ }
+            }, true);
+        } catch (e) { /* the boot net must never throw */ }
+    })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -299,6 +343,736 @@
     <!-- User-facing error banner (Phase 1.1, #20): failures a user must see go here, not only to the Debug Console -->
     <div id="userErrorBanner" style="display:none" class="fixed top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl z-[60] max-w-[92%] text-center"></div>
 
+    <!-- ERROR-REPORTER BEGIN error-tiers.js -->
+    <script>
+/*
+ * error-tiers.js — the fleet-wide classification table for visitor error reporting.
+ *
+ * This file is the SHARED POLICY for every app and website in the fleet
+ * (see ../PROPOSAL.md). It is deliberately a separate file from the reporter so a
+ * single copy can ship with the kit and every adopter classifies identically.
+ * Load it BEFORE error-reporter.js, or pass it explicitly as `tiers` in the
+ * reporter config — both work; the reporter also merges per-site overrides.
+ *
+ * Entry shapes:
+ *   { drop: true }  — Q1 of the heuristic: a deliberate user action, NOT an error.
+ *                     Dropped entirely: never logged, never counted.
+ *   { tier: 0|1|2 } — the code's expected tier when no stronger effect signal
+ *                     is present at the call site.
+ *
+ * Tier meanings (routing lives on the reading side, not in this table):
+ *   0 = self-healed by a fallback; count only.
+ *   1 = visible failure, user can still do the main thing.
+ *   2 = one user stuck; session effectively dead.
+ * Tier 3 (broken for everyone) is NEVER assigned here or anywhere in the page —
+ * it is earned only at the log, from aggregate signals (proposal Q5).
+ *
+ * The table is a DEFAULT, not a verdict. The reporter's classifier always lets
+ * observable effect override it:
+ *   - recovered === true          → Tier 0 (unless the write was ambiguous)
+ *   - ctx.writeAmbiguous === true → at least Tier 1
+ *   - ctx.sessionDead === true
+ *     or ctx.canContinue === false → Tier 2
+ * Codes NOT listed here are not ignored — they are classified purely by those
+ * effect signals (default Tier 1; Tier 2 if the session is dead or the error
+ * fired before the boot flag).
+ *
+ * Seeding: codes marked [inventory] come from the Family Routines App Phase 0
+ * survey (../INVENTORY.md, site ids in the notes). Codes marked [standard] are
+ * ordinary Firebase/DOM codes added on the same effect reasoning, not from the
+ * survey. When in doubt about a new code, leave it OUT — the heuristic will
+ * place it by effect, and the log will teach us where it belongs.
+ */
+(function (global) {
+  'use strict';
+
+  var ERROR_TIERS = {
+
+    /* ------------------------------------------------------------------
+     * DROP CLASS — deliberate user actions (heuristic Q1). Not errors.
+     * ------------------------------------------------------------------ */
+    'auth/popup-closed-by-user': {
+      drop: true,
+      note: '[inventory S4] The user closed the sign-in popup themselves.'
+    },
+    'auth/cancelled-popup-request': {
+      drop: true,
+      note: '[inventory S4] A second popup request superseded the first; the cancel is the app working as designed.'
+    },
+
+    /* ------------------------------------------------------------------
+     * AUTH (Firebase Authentication)
+     * ------------------------------------------------------------------ */
+    'auth/popup-blocked': {
+      tier: 0,
+      note: '[inventory S4] The browser blocked the popup and the redirect fallback is the designed recovery. Report with ctx.recovered = "pending" at fire time; if the redirect itself fails, the fallback site (S6) files its own Tier 2 report — this entry is the count of the self-heal working.'
+    },
+    'auth/network-request-failed': {
+      tier: 1,
+      note: '[inventory S4/S6] Transient until proven otherwise: ctx.recovered === true downgrades to Tier 0; if it kills sign-in or a session, the call site passes sessionDead and it classifies Tier 2.'
+    },
+    'auth/unauthorized-domain': {
+      tier: 2,
+      note: '[inventory S4] Config-class: the fallback cannot fix it and every visitor on this domain hits it. Prime Tier 3 candidate at the log.'
+    },
+    'auth/operation-not-allowed': {
+      tier: 2,
+      note: '[inventory S4/S7] Config-class: provider not enabled. Every visitor hits it.'
+    },
+    'auth/internal-error': {
+      tier: 2,
+      note: '[inventory S4] Auth backend/config failure the fallback cannot route around.'
+    },
+    'auth/api-key-not-valid': {
+      tier: 2,
+      note: '[inventory S2] Almost always deploy-borne (e.g. the __FIREBASE_API_KEY__ placeholder shipped unsubstituted). The release stamp on the event identifies the bad deploy.'
+    },
+    'auth/account-exists-with-different-credential': {
+      tier: 2,
+      note: '[inventory S7] Raised on return from redirect sign-in; the user is bounced back to a signed-out screen with no path forward in the app.'
+    },
+    'auth/credential-already-in-use': {
+      tier: 2,
+      note: '[inventory S7] Same shape as account-exists: sign-in cannot complete.'
+    },
+    'auth/user-disabled': {
+      tier: 2,
+      note: '[standard] The account is disabled; sign-in cannot complete by any in-app path.'
+    },
+
+    /* ------------------------------------------------------------------
+     * FIRESTORE — bare codes, shared by every operation, so these are
+     * deliberately conservative defaults. The call site's effect signals
+     * (area, sessionDead, canContinue, writeAmbiguous) do the real placing:
+     * permission-denied on a cosmetic listener is Tier 1, while the SAME
+     * code on provisioning or pre-first-snapshot tasks is Tier 2 by ctx.
+     * ------------------------------------------------------------------ */
+    'permission-denied': {
+      tier: 1,
+      note: '[inventory S9/S10/S15–S26] Rules or auth mismatch. Escalates to Tier 2 via ctx where the effect is a dead session (provisioning S13, profile load S10, tasks before first snapshot S16, admin registry S9). A rules regression shows up at the log as this code spiking across users — a Tier 3 pattern.'
+    },
+    'unavailable': {
+      tier: 1,
+      note: '[inventory passim] Backend unreachable / offline. For writes the compat SDK does not queue, so call sites pair it with ctx.writeAmbiguous when local state was already mutated (S17/S19/S21–S25).'
+    },
+    'aborted': {
+      tier: 1,
+      note: '[inventory S26] Transaction contention. Usually transient; if a later evaluation credits the completion, the log-side resolution downgrades the incident.'
+    },
+    'deadline-exceeded': {
+      tier: 1,
+      note: '[inventory S13/S26] Timed out. For transactions and batches the outcome may be unknowable client-side — pass ctx.writeAmbiguous so the ambiguous-write override holds it at Tier 1 minimum.'
+    },
+    'not-found': {
+      tier: 1,
+      note: '[inventory S21] E.g. updating a task another device already deleted. Self-resolves on the next snapshot.'
+    },
+    'invalid-argument': {
+      tier: 1,
+      note: '[inventory S22] A write the backend rejects as malformed; the user\u2019s input or edit is lost unless the UI kept it.'
+    },
+    'resource-exhausted': {
+      tier: 1,
+      note: '[standard] Quota/rate exhaustion. Worth its own code in the weekly counts — a rising rate is a capacity signal, not a bug spike.'
+    },
+    'failed-precondition': {
+      tier: 1,
+      note: '[standard] Operation rejected by current state (e.g. a transaction precondition). Judged Tier 1 by effect: visible, user can continue.'
+    },
+    'unauthenticated': {
+      tier: 2,
+      note: '[standard] The client\u2019s auth token is gone/invalid for a data operation; until re-auth the session is effectively dead for data.'
+    },
+
+    /* ------------------------------------------------------------------
+     * MODULE-SYNTHETIC codes — emitted by the reporter itself or by the
+     * instrumentation the inventory prescribes, not by any library.
+     * ------------------------------------------------------------------ */
+    'watchdog-fired': {
+      tier: 0,
+      note: '[inventory S5] The 10s sign-in popup watchdog fired and started the redirect fallback. Tier 0 when the redirect completes (ctx.recovered); the event exists so a rising rate is visible at the log (a browser update breaking popups is a Tier 3 pattern).'
+    },
+    'boot-timeout': {
+      tier: 2,
+      note: '[inventory S1/S2 + proposal boot flag] The boot flag was not set within the armed window: the page never became a working app (dead CDN script, init throw, blocked SDK). Session dead by definition.'
+    },
+    'resource-error': {
+      tier: 1,
+      note: '[inventory S1] A script/stylesheet/image failed to load, reported by the capture-phase resource listener. A failed decorative asset and a failed SDK both land here from the listener\u2019s viewpoint; the boot flag separates them (SDK death also produces boot-timeout).'
+    },
+    'script-error': {
+      tier: 1,
+      note: '[inventory S1/S3] Opaque cross-origin error ("Script error.") — the browser withholds code, stack, and origin by design. Only the count is meaningful; beforeBoot escalates it via the heuristic.'
+    },
+
+    /* ------------------------------------------------------------------
+     * BROWSER / DOM exception names (arrive via err.name, no .code).
+     * ------------------------------------------------------------------ */
+    'SecurityError': {
+      tier: 1,
+      note: '[inventory S33] Storage blocked (or a non-secure-context API). The app works; the first-paint cache and recovery correlation degrade.'
+    },
+    'QuotaExceededError': {
+      tier: 1,
+      note: '[inventory S33] localStorage full/blocked on write. Same effect class as SecurityError.'
+    },
+    'NotAllowedError': {
+      tier: 0,
+      note: '[inventory S34/S35] Clipboard write or similar permission-gated API refused. Diagnostics-surface only; count it, never page on it.'
+    }
+  };
+
+  global.ERROR_TIERS = ERROR_TIERS;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ERROR_TIERS: ERROR_TIERS };
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+    </script>
+    <!-- ERROR-REPORTER END error-tiers.js -->
+    <!-- ERROR-REPORTER BEGIN error-reporter.js -->
+    <script>
+/*
+ * error-reporter.js — visitor error reporting: the fleet-wide core module.
+ *
+ * Design: ../PROPOSAL.md. Classification policy: ./error-tiers.js (shared,
+ * load it first or pass `tiers` in config). First adopter: the Family
+ * Routines App (instrumentation map: ../INVENTORY.md).
+ *
+ * THE CONTRACT
+ *   - One funnel: reportError(err, ctx). Host code never talks to a backend.
+ *   - Emitted events have EXACTLY this shape, nothing else:
+ *         { code, tier, area, operation, recovered, release, page, site, ts }
+ *     (`operation` is the call-site operation name from ctx.operation, or
+ *     null when the call site doesn't name one — amended from 8 fields to 9
+ *     by Andrew's decision, Oct 29, 2026, before the first backfill.)
+ *     No user data, nothing a visitor typed — ever.
+ *   - Per-code throttle: within one page session, the first
+ *     `throttlePerCode` occurrences of each code (default 10, config) are
+ *     sent to the sink; further occurrences are counted, not sent. This is
+ *     quota insurance against a pathological loop (Andrew's decision,
+ *     Oct 29, 2026). Drop-class (deliberate) errors return before the
+ *     throttle and never consume the cap. Suppressed counts live in
+ *     reporter state only (getThrottleStats()) — no summary event is sent
+ *     on unload: a flush would itself spend quota and can race teardown.
+ *   - Tier 3 is never assigned here. It is earned only at the log (Q5).
+ *   - THE REPORTER CAN NEVER THROW INTO THE HOST PAGE. Every path — funnel,
+ *     classifier, sink dispatch, global handlers — is wrapped. A dead or
+ *     hostile backend must be indistinguishable from a healthy one, as far
+ *     as the app can tell. If you edit this file, preserve that property
+ *     above all others; the poisoned-sink test in error-reporter.test.mjs
+ *     exists to prove it.
+ *
+ * USAGE (browser)
+ *   <script src="error-tiers.js"><\/script>
+ *   <script src="error-reporter.js"><\/script>
+ *   <script>
+ *     ErrorReporter.configure({ site: 'showcase', release: 'abc1234', sink: 'worker',
+ *                               workerUrl: 'https://errors.example.com/collect' });
+ *     ErrorReporter.installGlobalHandlers();
+ *     // after first successful render / subscribe:
+ *     ErrorReporter.markBooted();
+ *   <\/script>
+ *
+ * USAGE (app with injected Firestore writer — the module imports nothing)
+ *   var reporter = ErrorReporter.createReporter({
+ *     site: 'family-routines-app', release: RELEASE_SHA, sink: 'firestore',
+ *     firestoreWriter: function (event) {
+ *       return db.collection('error_reports').add(event); // promise is fine
+ *     }
+ *   });
+ *   reporter.reportError(e, { area: 'tasks', operation: 'toggle-task' });
+ */
+(function (global) {
+  'use strict';
+
+  var DROP = -1; // internal sentinel: classify() returns this for "not an error"
+
+  /* ---------------------------------------------------------------- helpers */
+
+  function noop() {}
+
+  function isThenable(v) {
+    return v !== null && (typeof v === 'object' || typeof v === 'function') &&
+      typeof v.then === 'function';
+  }
+
+  // Swallow a thenable's rejection so a failing async sink can never become
+  // an unhandled rejection in the host page.
+  function swallow(v) {
+    try {
+      if (isThenable(v)) {
+        if (typeof v.catch === 'function') v.catch(noop);
+        else v.then(noop, noop);
+      }
+    } catch (e) { /* the swallowing itself must not throw */ }
+  }
+
+  function safeNow() {
+    try { return Date.now(); } catch (e) { return 0; }
+  }
+
+  function safePage() {
+    try {
+      if (global.location && typeof global.location.pathname === 'string') {
+        return global.location.pathname;
+      }
+    } catch (e) { /* sandboxed frames etc. */ }
+    return '';
+  }
+
+  /* ------------------------------------------------------- tier table access */
+
+  // Minimal last-resort table, used only if error-tiers.js was neither loaded
+  // nor passed in config AND the Node require below is unavailable. It exists
+  // so the drop-class (deliberate cancels) is honoured even in a broken
+  // deployment — silence about real errors is bad; logging a user's deliberate
+  // cancel as a failure is worse. The full policy lives in error-tiers.js.
+  var FALLBACK_TIERS = {
+    'auth/popup-closed-by-user': { drop: true },
+    'auth/cancelled-popup-request': { drop: true }
+  };
+
+  var sharedTiers = null;
+  try {
+    if (typeof module !== 'undefined' && module.exports &&
+        typeof require === 'function') {
+      sharedTiers = require('./error-tiers.js').ERROR_TIERS || null;
+    }
+  } catch (e) { sharedTiers = null; }
+
+  // Resolved lazily (at first classification, not at load) so script order
+  // between error-tiers.js and this file does not matter in the browser.
+  function resolveTable(overrides) {
+    var table = {};
+    var base = sharedTiers ||
+      (typeof global.ERROR_TIERS !== 'undefined' ? global.ERROR_TIERS : null) ||
+      FALLBACK_TIERS;
+    var k;
+    for (k in base) if (Object.prototype.hasOwnProperty.call(base, k)) table[k] = base[k];
+    if (overrides) {
+      for (k in overrides) {
+        if (Object.prototype.hasOwnProperty.call(overrides, k)) table[k] = overrides[k];
+      }
+    }
+    return table;
+  }
+
+  /* ------------------------------------------------------------ error intake */
+
+  // Extract the stable code. Firebase-style errors carry `.code`; DOM
+  // exceptions and JS errors carry `.name`; anything else is 'unknown' and
+  // will be classified purely by observable effect. Never stringify the raw
+  // error into the event — codes and names only, so payloads stay small,
+  // safe, and free of anything a visitor typed.
+  function extractCode(err) {
+    try {
+      if (err === null || err === undefined) return 'unknown';
+      if (typeof err === 'object' || typeof err === 'function') {
+        if (typeof err.code === 'string' && err.code) return err.code;
+        if (typeof err.name === 'string' && err.name && err.name !== 'Error') {
+          return err.name;
+        }
+        return 'unknown';
+      }
+      return 'unknown'; // strings/numbers carry a message, not a code
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+
+  /* ------------------------------------------------------------ classification
+   *
+   * The proposal's five questions, in order. Q5 (fleet-wide promotion) is
+   * log-side only and intentionally absent here.
+   *
+   * ctx signals (all optional):
+   *   deliberate     true → Q1 drop, regardless of code.
+   *   recovered      true → Q2 self-healed (Tier 0). 'pending' → a fallback
+   *                  is in flight; classify by the unrecovered effect and
+   *                  carry 'pending' in the event for log-side correlation.
+   *   writeAmbiguous true → the write's outcome is unknowable client-side;
+   *                  floors the tier at 1, overriding recovery (Q2 override).
+   *   sessionDead    true → Q4, Tier 2.
+   *   canContinue    false → the main thing is no longer doable → Tier 2.
+   *   beforeBoot     true → error fired before the boot flag; for an unknown
+   *                  code that means the app never became usable → Tier 2.
+   */
+  function classify(table, code, ctx) {
+    // Q1 — deliberate user action: not an error, drop entirely.
+    if (ctx.deliberate === true) return DROP;
+    var entry = null;
+    try { entry = table[code] || null; } catch (e) { entry = null; }
+    if (entry && entry.drop === true) return DROP;
+
+    // Q2 — a fallback recovered. (With an ambiguous write, "recovered" is
+    // exactly what nobody knows — the override holds it at Tier 1.)
+    if (ctx.recovered === true) {
+      return ctx.writeAmbiguous === true ? 1 : 0;
+    }
+
+    // Q4 signals, checked before the table default: a dead session outranks
+    // a code's expected tier.
+    if (ctx.sessionDead === true || ctx.canContinue === false) return 2;
+
+    // Known code: its expected tier from the shared table.
+    if (entry && typeof entry.tier === 'number') {
+      return ctx.writeAmbiguous === true ? Math.max(entry.tier, 1) : entry.tier;
+    }
+
+    // Unknown code: judge the observable effect only. Borderline resolves
+    // toward logging (Tier 1), never toward silence.
+    var tier = ctx.beforeBoot === true ? 2 : 1;
+    if (ctx.writeAmbiguous === true) tier = Math.max(tier, 1);
+    return tier;
+  }
+
+  /* ------------------------------------------------------------------- sinks
+   *
+   * A sink is send(event, rawErr). Only the Sentry adapter uses rawErr.
+   * Every adapter is defensive on its own AND the dispatcher wraps the call,
+   * so a sink gets two chances to fail safely.
+   */
+  function buildSink(config, memoryStore) {
+    var sink = config.sink || 'none';
+
+    if (typeof sink === 'function') {
+      return { send: function (event) { return sink(event); } };
+    }
+    switch (sink) {
+      case 'memory':
+        return {
+          send: function (event) { memoryStore.push(event); }
+        };
+
+      case 'firestore':
+        // Lazy by construction: the module imports nothing. The host injects
+        // a writer (in the app: (e) => db.collection('error_reports').add(e)).
+        // A missing writer is a silent no-op, never an error.
+        return {
+          send: function (event) {
+            if (typeof config.firestoreWriter === 'function') {
+              return config.firestoreWriter(event);
+            }
+          }
+        };
+
+      case 'worker':
+        return {
+          send: function (event) {
+            var url = config.workerUrl;
+            if (!url) return;
+            var body;
+            try { body = JSON.stringify(event); } catch (e) { return; }
+            try {
+              if (global.navigator &&
+                  typeof global.navigator.sendBeacon === 'function') {
+                if (global.navigator.sendBeacon(url, body)) return;
+              }
+            } catch (e) { /* fall through to fetch */ }
+            try {
+              if (typeof global.fetch === 'function') {
+                return global.fetch(url, {
+                  method: 'POST',
+                  body: body,
+                  keepalive: true,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+            } catch (e) { /* fire-and-forget means exactly that */ }
+          }
+        };
+
+      case 'sentry':
+        // Thin adapter over the REAL @sentry/browser surface — per the fleet
+        // library rule, no hand-invented forwarding protocol. The SDK is
+        // resolved, never imported: config.sentry (an injected @sentry/browser
+        // module object, for bundled adopters) first, then the CDN bundle's
+        // global `Sentry`. SDK init (dsn, release, environment) is the
+        // adopter's job, done before configure(); this adapter only captures.
+        // Real Errors go to captureException (full stack, SDK grouping);
+        // synthetic events with no Error object (boot-timeout, resource-error,
+        // bare {code} failures) go to captureMessage — the surface the SDK
+        // provides for exactly those. The fingerprint appends site/code/area
+        // to '{{ default }}' so a failure class groups together fleet-wide
+        // without discarding the SDK's own stack-based grouping.
+        return {
+          send: function (event, rawErr) {
+            var Sentry = null;
+            if (config.sentry) Sentry = config.sentry;
+            if (!Sentry) {
+              try { Sentry = global.Sentry || null; } catch (e) { Sentry = null; }
+            }
+            if (!Sentry) return;
+            var levels = { 0: 'info', 1: 'warning', 2: 'error' };
+            var context = {
+              level: levels[event.tier] || 'error',
+              tags: {
+                code: event.code,
+                tier: String(event.tier),
+                area: event.area,
+                site: event.site,
+                release: event.release,
+                recovered: String(event.recovered)
+              },
+              fingerprint: ['{{ default }}', event.site, event.code, event.area]
+            };
+            if (rawErr instanceof Error &&
+                typeof Sentry.captureException === 'function') {
+              Sentry.captureException(rawErr, context);
+            } else if (typeof Sentry.captureMessage === 'function') {
+              Sentry.captureMessage(event.code, context);
+            } else if (typeof Sentry.captureException === 'function') {
+              var err = new Error(event.code);
+              err.name = event.code;
+              Sentry.captureException(err, context);
+            }
+          }
+        };
+
+      case 'none':
+      default:
+        return { send: noop };
+    }
+  }
+
+  /* ---------------------------------------------------------------- reporter */
+
+  function createReporter(config) {
+    config = config || {};
+    var table = resolveTable(config.tiers);
+    var memoryStore = [];
+    var sink = buildSink(config, memoryStore);
+    var booted = false;
+    var handlersInstalled = false;
+    var bootTimer = null;
+
+    // Per-code throttle state (per reporter instance = per page session).
+    // throttlePerCode: occurrences of one code sent to the sink before the
+    // rest are only counted. Default 10. A non-number or negative value
+    // falls back to the default; Infinity disables the throttle. This state
+    // must never be able to break the funnel — plain object, plain counts.
+    var throttleCap = (typeof config.throttlePerCode === 'number' &&
+      config.throttlePerCode >= 0)
+      ? Math.floor(config.throttlePerCode) : 10;
+    var throttleCounts = {}; // code -> { reported: n, suppressed: n }
+
+    function isBooted() { return booted; }
+
+    function markBooted() {
+      booted = true;
+      if (bootTimer !== null) {
+        try { clearTimeout(bootTimer); } catch (e) {}
+        bootTimer = null;
+      }
+    }
+
+    // If the boot flag is not set within ms, the page never became a working
+    // app: report it (Tier 2 via the boot-timeout entry). Returns nothing;
+    // markBooted() disarms it. This is the in-module helper — the CDN-death
+    // case additionally needs the dependency-free inline head snippet, which
+    // is an integration artifact (see README), not part of this module.
+    function armBootTimer(ms) {
+      try {
+        if (bootTimer !== null) clearTimeout(bootTimer);
+        bootTimer = setTimeout(function () {
+          bootTimer = null;
+          if (!booted) {
+            reportError({ code: 'boot-timeout' },
+              { area: 'render', sessionDead: true, beforeBoot: true });
+          }
+        }, typeof ms === 'number' && ms > 0 ? ms : 10000);
+        if (bootTimer && typeof bootTimer.unref === 'function') bootTimer.unref();
+      } catch (e) { /* a timer must never break the page */ }
+    }
+
+    function classifyError(err, ctx) {
+      try {
+        ctx = ctx || {};
+        var tier = classify(table, extractCode(err), ctx);
+        return tier === DROP ? null : tier;
+      } catch (e) {
+        return 1; // classification itself failing resolves toward logging
+      }
+    }
+
+    // THE FUNNEL. Returns the emitted event, or null if the error was
+    // dropped (deliberate) — and null, quietly, if anything at all went
+    // wrong inside the reporter. It cannot throw.
+    function reportError(err, ctx) {
+      try {
+        ctx = ctx || {};
+        var code = extractCode(err);
+        var tier = classify(table, code, ctx);
+        if (tier === DROP) return null;
+
+        // Per-code throttle — deliberately AFTER the drop check, so
+        // deliberate cancels never consume the cap. A suppressed occurrence
+        // returns null exactly like a drop, except it is counted.
+        var counts = throttleCounts[code];
+        if (!counts) {
+          counts = { reported: 0, suppressed: 0 };
+          throttleCounts[code] = counts;
+        }
+        if (counts.reported >= throttleCap) {
+          counts.suppressed += 1;
+          return null;
+        }
+        counts.reported += 1;
+
+        var event = {
+          code: code,
+          tier: tier,
+          area: typeof ctx.area === 'string' && ctx.area ? ctx.area : 'unknown',
+          operation: typeof ctx.operation === 'string' && ctx.operation
+            ? ctx.operation : null,
+          recovered: ctx.recovered === true ? true
+            : (ctx.recovered === 'pending' ? 'pending' : false),
+          release: typeof config.release === 'string' ? config.release : '',
+          page: typeof ctx.page === 'string' ? ctx.page : safePage(),
+          site: typeof config.site === 'string' ? config.site : '',
+          ts: safeNow()
+        };
+
+        try {
+          swallow(sink.send(event, err));
+        } catch (e) { /* a dead sink is indistinguishable from a healthy one */ }
+
+        return event;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /* ------------------------------------------------------ global handlers */
+
+    // Installs the last-resort net (inventory S3): runtime errors WITH the
+    // full error object, unhandled promise rejections, and resource-load
+    // failures. Accepts an optional event target (defaults to the global
+    // window) so tests and non-window hosts can inject one. Observation
+    // only: nothing is preventDefault-ed, nothing is rethrown.
+    function installGlobalHandlers(target) {
+      try {
+        var t = target || global;
+        if (!t || typeof t.addEventListener !== 'function') return false;
+        if (handlersInstalled) return true;
+        handlersInstalled = true;
+
+        // Runtime errors (non-capture): ErrorEvent.error is the full object.
+        t.addEventListener('error', function (e) {
+          try {
+            if (!e) return;
+            // Resource failures have an element target and no .error; the
+            // capture listener below owns those — skip them here so nothing
+            // is double-reported.
+            if (e.target && e.target !== t) return;
+            if (e.error) {
+              reportError(e.error, {
+                area: 'render', source: 'window.onerror', beforeBoot: !booted
+              });
+            } else if (typeof e.message === 'string' && e.message) {
+              // Cross-origin opaque error: no object survives, count it.
+              reportError({ code: 'script-error' }, {
+                area: 'render', source: 'window.onerror', beforeBoot: !booted
+              });
+            }
+          } catch (ignored) {}
+        }, false);
+
+        // Resource errors (capture phase — they do not bubble): script,
+        // stylesheet, and image loads that failed.
+        t.addEventListener('error', function (e) {
+          try {
+            if (!e || !e.target || e.target === t) return;
+            var el = e.target;
+            var url = (typeof el.src === 'string' && el.src) ||
+                      (typeof el.href === 'string' && el.href) || '';
+            if (!url) return;
+            reportError({ code: 'resource-error' }, {
+              area: 'render', source: 'resource', resourceUrl: url,
+              beforeBoot: !booted
+            });
+          } catch (ignored) {}
+        }, true);
+
+        // The hole in the app's current net: rejected promises nobody caught.
+        t.addEventListener('unhandledrejection', function (e) {
+          try {
+            var reason = e ? e.reason : undefined;
+            reportError(reason === undefined ? { code: 'unknown' } : reason, {
+              area: 'unknown', source: 'unhandledrejection', beforeBoot: !booted
+            });
+          } catch (ignored) {}
+        }, false);
+
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    return {
+      reportError: reportError,
+      classifyError: classifyError,
+      installGlobalHandlers: installGlobalHandlers,
+      markBooted: markBooted,
+      isBooted: isBooted,
+      armBootTimer: armBootTimer,
+      // Test/inspection access to the memory sink's store.
+      getEvents: function () { return memoryStore.slice(); },
+      clearEvents: function () { memoryStore.length = 0; },
+      // Per-code throttle state: { code: { reported, suppressed } }. This is
+      // the ONLY place suppressed counts surface — by design no summary
+      // event is emitted on unload (see the contract note at the top).
+      getThrottleStats: function () {
+        var out = {};
+        for (var k in throttleCounts) {
+          if (Object.prototype.hasOwnProperty.call(throttleCounts, k)) {
+            out[k] = {
+              reported: throttleCounts[k].reported,
+              suppressed: throttleCounts[k].suppressed
+            };
+          }
+        }
+        return out;
+      },
+      config: {
+        site: typeof config.site === 'string' ? config.site : '',
+        release: typeof config.release === 'string' ? config.release : '',
+        sink: typeof config.sink === 'string' ? config.sink : 'custom',
+        throttlePerCode: throttleCap
+      }
+    };
+  }
+
+  /* ------------------------------------------------------- default singleton */
+
+  var defaultReporter = createReporter({ sink: 'none' });
+
+  function configure(cfg) {
+    try { defaultReporter = createReporter(cfg || {}); } catch (e) { /* keep the old one */ }
+    return defaultReporter;
+  }
+
+  var api = {
+    createReporter: createReporter,
+    configure: configure,
+    reportError: function (err, ctx) { return defaultReporter.reportError(err, ctx); },
+    classifyError: function (err, ctx) { return defaultReporter.classifyError(err, ctx); },
+    installGlobalHandlers: function (t) { return defaultReporter.installGlobalHandlers(t); },
+    markBooted: function () { defaultReporter.markBooted(); },
+    isBooted: function () { return defaultReporter.isBooted(); },
+    armBootTimer: function (ms) { defaultReporter.armBootTimer(ms); },
+    getDefaultReporter: function () { return defaultReporter; },
+    DROP: DROP
+  };
+
+  global.ErrorReporter = api;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+    </script>
+    <!-- ERROR-REPORTER END error-reporter.js -->
     <script>
         // ============================================================================
         // FIX 1 — CYCLE DATES (SPEC §3): Noon-to-noon local cycle, zero toISOString()
@@ -396,13 +1170,84 @@
         function copyDebugLogs() {
             navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert("Full debug trace copied to clipboard!"));
         }
-        window.onerror = (m, u, l) => logDebug(`RUNTIME ERROR: ${m} (Line ${l})`, true);
+        // ============================================================================
+        // ERROR REPORTING (Phase 1) — the fleet error-reporter funnel (vendored
+        // inline above between the ERROR-REPORTER markers; fleet-kit is the
+        // upstream source and scripts/error-reporter.js + scripts/error-tiers.js
+        // are this repo's verbatim copies, drift-checked in CI). One funnel:
+        // reportError(err, ctx). Events are exactly {code, tier, area, operation,
+        // recovered, release, page, site, ts} — codes and context only, no user
+        // data, ever. The reporter can never throw into the app.
+        // ============================================================================
+        try {
+            ErrorReporter.configure({
+                site: 'routines-and-streaks',
+                release: '__RELEASE_SHA__',
+                sink: 'firestore',
+                firestoreWriter: function (event) {
+                    // Lazy by construction: `db` is initialized a few lines below.
+                    // Reports fired before that are dropped here — the head boot
+                    // net's stash is the channel for that window.
+                    try { if (db) return db.collection('error_reports').add(event); } catch (e) { /* a dead sink is silent */ }
+                }
+            });
+            ErrorReporter.installGlobalHandlers();
+            ErrorReporter.armBootTimer(15000);
+        } catch (e) { /* the reporter must never break boot */ }
+        // The module's handlers own reporting from here; the head boot net hands
+        // its timer + resource listener over to them.
+        if (window.__bootNetHandoff) window.__bootNetHandoff();
+        function reportError(err, ctx) { try { return ErrorReporter.reportError(err, ctx); } catch (e) { return null; } }
+        // The Debug Console keeps its old runtime-error feed (this pair replaces
+        // the deleted window.onerror assignment — S3).
+        window.addEventListener('error', function (e) { try { if (e && e.message) logDebug(`RUNTIME ERROR: ${e.message}`, true); } catch (ignored) {} });
+        window.addEventListener('unhandledrejection', function (e) { try { const r = e && e.reason; logDebug(`UNHANDLED REJECTION: ${(r && (r.code || r.message)) || 'unknown'}`, true); } catch (ignored) {} });
+
+        // Boot flag (S2/S16/S18): set only after init + the first successful
+        // tasks AND streak snapshots. These hooks land in Step 2; the listeners'
+        // own instrumentation (Step 5) must not disturb the calls.
+        let tasksSnapshotSeen = false;
+        let streakSnapshotSeen = false;
+        function noteTasksSnapshot() { tasksSnapshotSeen = true; maybeMarkBooted(); }
+        function noteStreakSnapshot() { streakSnapshotSeen = true; maybeMarkBooted(); }
+        function maybeMarkBooted() {
+            if (tasksSnapshotSeen && streakSnapshotSeen) {
+                try { ErrorReporter.markBooted(); } catch (e) {}
+                if (window.__bootNetMarkBooted) window.__bootNetMarkBooted();
+            }
+        }
+
+        // Drain the head boot net's stash (S1/S2) through the funnel. Called
+        // right after Firebase init below, when the reporter and `db` both
+        // exist. Classification context only: whether the shipped config still
+        // carries the API-key placeholder (a boolean — never the key).
+        function drainBootStash() {
+            try {
+                let stash = [];
+                try { stash = JSON.parse(localStorage.getItem('pending_error_reports') || '[]'); } catch (e) { stash = []; }
+                if (!Array.isArray(stash) || stash.length === 0) return;
+                try { localStorage.removeItem('pending_error_reports'); } catch (e) {}
+                const placeholderPresent = (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey === '__FIREBASE_API_KEY__');
+                stash.forEach(function (entry) {
+                    const code = (entry && typeof entry.code === 'string') ? entry.code : 'resource-error';
+                    reportError({ code: code }, {
+                        area: 'render',
+                        operation: code === 'boot-timeout' ? 'boot-timeout' : 'resource-error',
+                        recovered: false,
+                        beforeBoot: true,
+                        placeholderPresent: placeholderPresent,
+                        resourceClass: entry && entry.resourceClass
+                    });
+                });
+            } catch (e) { /* draining must never break boot */ }
+        }
 
         const firebaseConfig = { apiKey: "__FIREBASE_API_KEY__", authDomain: "family-routines-app.firebaseapp.com", projectId: "family-routines-app" };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
         logDebug('Booting Routines & Streaks Phase 1 (Solo Mode)...');
+        drainBootStash();
 
         let session = {
             uid: '',
@@ -904,6 +1749,7 @@
 
             // 1. UID-scoped tasks listener + FIX 2 Daily Reset
             tasksUnsub = famRef.collection('tasks').where('ownerId', '==', uid).onSnapshot(async snap => {
+                noteTasksSnapshot();
                 let userTasks = [];
                 snap.forEach(d => userTasks.push({ id: d.id, ...d.data() }));
                 userTasks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -935,6 +1781,7 @@
 
             // 2. UID-scoped streak listener + FIX 3 Lazy Reconcile on load
             streakUnsub = famRef.collection('streaks').doc(uid).onSnapshot(async doc => {
+                noteStreakSnapshot();
                 const curCycle = cycleIdFor();
                 const prevCycle = addDays(curCycle, -1);
 

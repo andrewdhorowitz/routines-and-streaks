@@ -87,3 +87,30 @@ jobs:
               sys.exit(1)
           print(f"OK: index.html intact, {len(text)} chars.")
           EOF
+      - name: Check the release-SHA placeholder is present
+        run: |
+          if ! grep -q '__RELEASE_SHA__' index.html; then
+            echo "::error::index.html is missing the __RELEASE_SHA__ placeholder — deploy.yml cannot stamp the release without it."
+            exit 1
+          fi
+          echo "OK: __RELEASE_SHA__ placeholder present."
+      - name: Check the vendored error-reporter matches scripts/
+        run: |
+          python3 - << 'EOF'
+          import pathlib, sys
+          html = pathlib.Path("index.html").read_text(encoding="utf-8")
+          for name in ("error-tiers.js", "error-reporter.js"):
+              begin = f"<!-- ERROR-REPORTER BEGIN {name} -->"
+              end = f"<!-- ERROR-REPORTER END {name} -->"
+              if begin not in html or end not in html:
+                  print(f"::error::index.html is missing the ERROR-REPORTER markers for {name}.")
+                  sys.exit(1)
+              block = html.split(begin, 1)[1].split(end, 1)[0]
+              lines = [l for l in block.splitlines() if l.strip() not in ("<script>", "</script>")]
+              inline = "\n".join(lines).strip().replace("<\\/script", "</script")
+              ref = pathlib.Path("scripts", name).read_text(encoding="utf-8").strip()
+              if inline != ref:
+                  print(f"::error::Vendored {name} in index.html differs from scripts/{name} (fleet-kit is the upstream source; re-vendor verbatim).")
+                  sys.exit(1)
+              print(f"OK: vendored {name} matches scripts/{name}.")
+          EOF

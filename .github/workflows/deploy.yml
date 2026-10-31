@@ -52,6 +52,17 @@ jobs:
             echo "SUCCESS: API Key injected."
           fi
 
+          echo "=== TRACE: INJECTING RELEASE SHA ==="
+          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-7)"
+          sed -i "s/__RELEASE_SHA__/${SHORT_SHA}/g" index.html
+
+          if grep -q "__RELEASE_SHA__" index.html; then
+            echo "ERROR: Release SHA injection failed!"
+            exit 1
+          else
+            echo "SUCCESS: Release SHA injected (${SHORT_SHA})."
+          fi
+
       - name: Setup Pages
         uses: actions/configure-pages@v6
 
