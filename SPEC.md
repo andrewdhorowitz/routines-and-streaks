@@ -203,6 +203,12 @@ Still required **now**, even in test, because they are cheap and prevent real ac
 - The client derives the session role from the registry at sign-in; the member document's `role` field is display metadata that an admin session self-syncs. Custom claims remain the Phase 3 end-state.
 - Record: rules deployed and verified (#19, closed); registry-based client build (#17, closed); visible error surface (#20, partially shipped).
 
+### 10.2 Error reporting (Phase 1, deployed Oct 31, 2026)
+
+- The app carries the fleet error reporter (source of truth: fleet-kit `error-reporter/`, MIT). It is vendored inline in `index.html` between the `ERROR-REPORTER` markers, with verbatim copies at `scripts/error-reporter.js` / `scripts/error-tiers.js` and a CI drift check between them. The funnel core is dependency-free and can never throw into the app (the owner's boot-critical exception to the layers-of-reuse rule). A dependency-free boot-net snippet in `<head>` covers the failures no in-page code can reach (dead CDN, failed init) via a localStorage stash drained on the next successful boot.
+- Events are exactly nine fields — `{code, tier, area, operation, recovered, release, page, site, ts}` — codes and context only: no uid, no email, nothing a visitor typed. `release` is the deploy commit SHA, substituted by `deploy.yml` beside the API key. Design and per-site instrumentation map: the fleet Error Reporting Phase 1 plan (`PHASE1-PLAN.md`, kept with the module).
+- Sink: the Firestore `error_reports` collection (§5's model, one addition). Creates are deliberately unauthenticated — the highest-value failures happen before sign-in — and shape-locked by `firestore.rules` (exact nine keys, all typed); reads and deletes are admin-only; updates are never allowed. The reading side (weekly digest, Tier 2 same-day heads-up, Tier 3 promotion) is Phase 2 and lives outside the app.
+
 ## 11. Deferred to production gate (explicitly out of scope for test-stage prompts)
 
 Firebase Auth-enforced identity + restrictive Firestore Security Rules committed as `firestore.rules`; removing client-side role trust; PWA manifest/service worker and real installability; scheduled/push notifications; Tailwind build instead of the Play CDN; SRI hashes; splitting `index.html` into modules; automated test suite; staging environment. Do not spend generator cycles on these until the owner says the app is leaving test stage.
