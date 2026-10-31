@@ -2713,7 +2713,7 @@
                 alert("All Firestore databases have been reset!");
                 await loadGlobalDatabaseOverview();
             } catch (e) {
-                reportError(e, { area: 'unknown', operation: 'admin-wipe-all', recovered: false, sessionDead: true, familiesProcessed: familiesProcessed, docsDeleted: docsDeleted });
+                reportError(e, { area: 'unknown', operation: 'admin-wipe-all', recovered: false, canContinue: false, familiesProcessed: familiesProcessed, docsDeleted: docsDeleted });
                 logDebug(`DB Wipe Error: ${e.message}`, true);
                 alert(`Error wiping DBs: stopped after ${familiesProcessed} families (${docsDeleted} documents deleted). ${e.message}`);
             }
