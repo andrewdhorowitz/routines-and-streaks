@@ -2086,10 +2086,21 @@
                 return;
             }
 
-            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(t.id).update({
-                done: newDone,
-                cycleId: currentCycle
-            });
+            // S21: catch around the write only (evaluateMemberStreak keeps
+            // its own handling — S26). Local state was already mutated, so
+            // the write is ambiguous: report Tier 1, banner once, and stop —
+            // the old abort semantics, now visible. The live tasks listener
+            // reconciles the screen on its next snapshot.
+            try {
+                await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(t.id).update({
+                    done: newDone,
+                    cycleId: currentCycle
+                });
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'toggle-task', writeAmbiguous: true });
+                showUserErrorOnce('toggle-task', friendlyError(e, 'That check-off could not be saved. Check your connection and try again.'));
+                return;
+            }
             logUsage('Task Toggled', `${t.title} -> ${newDone}`);
 
             await evaluateMemberStreak(session.uid);
@@ -2218,24 +2229,33 @@
 
             const tasksCol = db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks');
 
-            if (editId) {
-                await tasksCol.doc(editId).update({ title, reminder, deadline, subtasks });
-                logUsage('Task Edited', title);
-            } else {
-                const tid = generateSecureId('task_');
-                const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order ?? 0)) + 1 : 0;
-                await tasksCol.doc(tid).set({
-                    id: tid,
-                    ownerId: session.uid,
-                    title,
-                    reminder,
-                    deadline,
-                    order: nextOrder,
-                    done: false,
-                    cycleId: cycleIdFor(),
-                    subtasks
-                });
-                logUsage('Task Added', title);
+            // S22: on failure the modal STAYS OPEN (closeModals runs only on
+            // success) — the typed input survives to retry, and the banner
+            // says so. The worst silent shape in the app becomes the best.
+            try {
+                if (editId) {
+                    await tasksCol.doc(editId).update({ title, reminder, deadline, subtasks });
+                    logUsage('Task Edited', title);
+                } else {
+                    const tid = generateSecureId('task_');
+                    const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order ?? 0)) + 1 : 0;
+                    await tasksCol.doc(tid).set({
+                        id: tid,
+                        ownerId: session.uid,
+                        title,
+                        reminder,
+                        deadline,
+                        order: nextOrder,
+                        done: false,
+                        cycleId: cycleIdFor(),
+                        subtasks
+                    });
+                    logUsage('Task Added', title);
+                }
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: editId ? 'save-task-edit' : 'save-task-add', writeAmbiguous: true });
+                showUserErrorOnce('save-task', friendlyError(e, 'Your task could not be saved. It is still here in the form — check your connection and try again.'));
+                return;
             }
             closeModals();
         }
@@ -2245,7 +2265,15 @@
             if (!t) return;
             if (!confirm(`Delete task "${t.title}"?`)) return;
             if (demoMode) { tasks = tasks.filter(x => x.id !== taskId); renderTasks(); return; }
-            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).delete();
+            // S23 (the confirm() decline above stays drop-class — it returns
+            // before this point and is never reported).
+            try {
+                await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).delete();
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'delete-task', writeAmbiguous: true });
+                showUserErrorOnce('delete-task', friendlyError(e, 'That task could not be deleted. Check your connection and try again.'));
+                return;
+            }
             logUsage('Task Deleted', t.title);
         }
 
@@ -2276,7 +2304,14 @@
 
             batch.update(tasksCol.doc(tasks[idx].id), { order: tasks[idx].order });
             batch.update(tasksCol.doc(tasks[swapIdx].id), { order: tasks[swapIdx].order });
-            await batch.commit();
+            // S24: the local reorder has already been applied above; a failed
+            // commit silently reverted on the next snapshot. Now it reports.
+            try {
+                await batch.commit();
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'reorder-tasks', writeAmbiguous: true });
+                showUserErrorOnce('reorder-tasks', friendlyError(e, 'The new order could not be saved — it may revert in a moment.'));
+            }
         }
 
         async function toggleSubtask(taskId, subIdx) {
@@ -2284,7 +2319,14 @@
             if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
             t.subtasks[subIdx].done = !t.subtasks[subIdx].done;
             if (demoMode) { renderTasks(); return; }
-            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+            // S25: local state was already mutated; a rejected write used to
+            // diverge silently until the next snapshot.
+            try {
+                await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'toggle-subtask', writeAmbiguous: true });
+                showUserErrorOnce('toggle-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+            }
         }
 
         async function deleteSubtask(taskId, subIdx) {
@@ -2292,7 +2334,13 @@
             if (!t || !Array.isArray(t.subtasks) || !t.subtasks[subIdx]) return;
             t.subtasks.splice(subIdx, 1);
             if (demoMode) { renderTasks(); return; }
-            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+            // S25: same wrapper as toggle-subtask.
+            try {
+                await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'delete-subtask', writeAmbiguous: true });
+                showUserErrorOnce('delete-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+            }
         }
 
         async function promptAddSubtask(taskId) {
@@ -2303,7 +2351,13 @@
             const updated = Array.isArray(t.subtasks) ? [...t.subtasks] : [];
             updated.push({ title: subTitle.trim(), done: false });
             if (demoMode) { t.subtasks = updated; renderTasks(); return; }
-            await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: updated });
+            // S25: same wrapper as toggle-subtask.
+            try {
+                await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: updated });
+            } catch (e) {
+                reportError(e, { area: 'tasks', operation: 'add-subtask', writeAmbiguous: true });
+                showUserErrorOnce('add-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+            }
         }
 
         // P5 & FIX 3: Reset user's tasks to system defaults for current cycle AND delete current cycle's completion doc so it can be re-earned
