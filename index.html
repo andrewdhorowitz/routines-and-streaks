@@ -1695,6 +1695,9 @@
                 const cw = document.getElementById('cycleWindows');
                 if (cw) cw.innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
             }, err => {
+                // S15: report the RAW error first; the existing banner path
+                // then runs unchanged. Reports are not once-gated.
+                reportError(err, { area: 'render', operation: 'subscribe-config', earlyBufferInEffect: session.earlyBuffer });
                 logDebug(`Config listener warning: ${err.message}`, true);
                 showUserErrorOnce('config', friendlyError(err, 'Live settings updates are not coming through. Refresh the page.'));
             });
@@ -1851,6 +1854,11 @@
             }
         }
 
+        // S17 dedupe: one rollover report per cycle transition (the funnel's
+        // per-code throttle is the backstop, not the mechanism).
+        let lastRolloverReportKey = null;
+        let historySnapshotSeen = false;
+
         // ============================================================================
         // P3, FIX 2, FIX 3 — UID-SCOPED REALTIME LISTENERS & DAILY RESET
         // ============================================================================
@@ -1872,6 +1880,7 @@
                 const needsReset = userTasks.some(t => !t.cycleId || t.cycleId < currentCycle);
                 if (needsReset && userTasks.length > 0) {
                     logDebug(`Cycle rollover detected (-> ${currentCycle}). Resetting all ${userTasks.length} user tasks.`);
+                    const fromCycle = userTasks.map(t => t.cycleId || 'none').sort()[0];
                     const batch = db.batch();
                     userTasks.forEach(t => {
                         const ref = famRef.collection('tasks').doc(t.id);
@@ -1881,13 +1890,36 @@
                         t.cycleId = currentCycle;
                         t.subtasks = resetSubs;
                     });
-                    await batch.commit();
+                    // S17: this commit used to fail invisibly inside the
+                    // listener — locally pre-mutated, rejected, and retried on
+                    // every snapshot: a silent divergence loop. Now it reports
+                    // once per cycle transition and banners once; the local
+                    // (already-reset) state stays as the screen's truth until
+                    // a snapshot reconciles it.
+                    try {
+                        await batch.commit();
+                    } catch (e) {
+                        const rolloverKey = `${fromCycle}->${currentCycle}`;
+                        if (lastRolloverReportKey !== rolloverKey) {
+                            lastRolloverReportKey = rolloverKey;
+                            reportError(e, { area: 'tasks', operation: 'cycle-rollover-reset', writeAmbiguous: true, fromCycle: fromCycle, toCycle: currentCycle, taskCount: userTasks.length });
+                        }
+                        showUserErrorOnce('rollover', friendlyError(e, 'Your new day could not be started on the server. Your list may show yesterday’s state until this clears.'));
+                    }
                 }
 
                 tasks = userTasks;
                 renderTasks();
                 await evaluateMemberStreak(uid);
             }, err => {
+                // S16: raw code first, existing banner path unchanged.
+                // Before the first snapshot the session is effectively dead
+                // (Tier 2); after it, Tier 1 by the table.
+                if (!tasksSnapshotSeen) {
+                    reportError(err, { area: 'tasks', operation: 'subscribe-tasks', recovered: false, sessionDead: true, firstSnapshotReceived: false });
+                } else {
+                    reportError(err, { area: 'tasks', operation: 'subscribe-tasks', recovered: false, firstSnapshotReceived: true });
+                }
                 logDebug(`Tasks listener error: ${err.message}`, true);
                 showUserErrorOnce('tasks', friendlyError(err, 'Your tasks stopped syncing. Refresh the page.'));
             });
@@ -1916,10 +1948,18 @@
                 if (currentStreak > 0 && lastComp !== curCycle && lastComp !== prevCycle) {
                     logDebug(`Streak lazy reconcile: lastCompletedCycleId (${lastComp}) is older than ${prevCycle}. Resetting currentStreak to 0.`);
                     currentStreak = 0;
-                    await famRef.collection('streaks').doc(uid).set({
-                        currentStreak: 0,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
+                    // S19: this write used to fail invisibly inside the
+                    // listener and retry on every snapshot. Report it (the
+                    // displayed zero is a plausible state — no banner; the
+                    // divergence is a log-side concern).
+                    try {
+                        await famRef.collection('streaks').doc(uid).set({
+                            currentStreak: 0,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    } catch (e) {
+                        reportError(e, { area: 'streak', operation: 'streak-lazy-reconcile', writeAmbiguous: true, lastCompletedCycleId: lastComp });
+                    }
                 }
 
                 session.currentStreak = currentStreak;
@@ -1928,18 +1968,23 @@
                 localStorage.setItem(`firstpaint_streak_${uid}`, String(currentStreak));
                 updateStreakUI(currentStreak, longestStreak, totalCompleted);
             }, err => {
+                // S18: raw code first (Tier 1), existing banner unchanged.
+                reportError(err, { area: 'streak', operation: 'subscribe-streak', recovered: false, firstSnapshotReceived: streakSnapshotSeen });
                 logDebug(`Streak listener error: ${err.message}`, true);
                 showUserErrorOnce('streak', friendlyError(err, 'Your streak stopped syncing. Refresh the page.'));
             });
 
             // 3. P6: UID-scoped completion history listener
             historyUnsub = famRef.collection('streaks').doc(uid).collection('completions').onSnapshot(snap => {
+                historySnapshotSeen = true;
                 let items = [];
                 snap.forEach(d => items.push({ cycleId: d.id, ...d.data() }));
                 items.sort((a, b) => b.cycleId.localeCompare(a.cycleId));
                 completionHistory = items;
                 renderCompletionHistory();
             }, err => {
+                // S20: raw code first (Tier 1), existing banner unchanged.
+                reportError(err, { area: 'history', operation: 'subscribe-history', recovered: false, firstSnapshotReceived: historySnapshotSeen });
                 logDebug(`History listener error: ${err.message}`, true);
                 showUserErrorOnce('history', friendlyError(err, 'Your history stopped syncing. Refresh the page.'));
             });
@@ -2173,6 +2218,13 @@
                     logUsage('Cycle Completed', `Cycle ${currentCycle} (${completedTitles.length} tasks)`);
                 }
             } catch (e) {
+                // S26: report the raw error BEFORE friendlyError translates
+                // it. unavailable / deadline-exceeded are ambiguous by
+                // construction (the transaction may have committed), so the
+                // ambiguous-write override holds those at Tier 1 minimum. A
+                // transaction that completes as an already-existed no-op is
+                // success and reports nothing (the idempotency rule).
+                reportError(e, { area: 'streak', operation: 'streak-credit-transaction', writeAmbiguous: !!(e && (e.code === 'unavailable' || e.code === 'deadline-exceeded')), cycleId: currentCycle });
                 logDebug(`Streak transaction error: ${e.message}`, true);
                 showUserErrorOnce('streakTx', friendlyError(e, 'Your completion could not be recorded just now. Reload the app to retry.'));
             }
