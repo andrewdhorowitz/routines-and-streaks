@@ -1168,7 +1168,8 @@
         }
 
         function copyDebugLogs() {
-            navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert("Full debug trace copied to clipboard!"));
+            // S34: a failed copy is at least counted (NotAllowedError -> Tier 0).
+            navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert("Full debug trace copied to clipboard!")).catch(e => reportError(e, { area: 'render', operation: 'copy-debug-logs' }));
         }
         // ============================================================================
         // ERROR REPORTING (Phase 1) — the fleet error-reporter funnel (vendored
@@ -1281,7 +1282,15 @@
                 role: session.role,
                 cycleId: cycleIdFor(),
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => logDebug(`Audit log err: ${e.message}`, true));
+            }).catch(e => {
+                // S32: one outbound funnel call. Direction is strictly
+                // one-way (audit -> reporter); the reporter never calls
+                // logUsage, so no recursion is possible. The audit write is
+                // fire-and-forget by design — its failure has no user
+                // effect, so it classifies Tier 0.
+                reportError(e, { area: 'history', operation: 'audit-write', recovered: true, action: String(action) });
+                logDebug(`Audit log err: ${e.message}`, true);
+            });
         }
 
         // ============================================================================
@@ -1836,7 +1845,15 @@
             document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
             document.getElementById('cycleWindows').innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
 
-            const cachedStreak = localStorage.getItem(`firstpaint_streak_${session.uid}`);
+            // S33: report-and-continue. A storage-blocked browser must
+            // never gate render on a convenience cache (this throw used to
+            // escalate into the S8 auth shell).
+            let cachedStreak = null;
+            try {
+                cachedStreak = localStorage.getItem(`firstpaint_streak_${session.uid}`);
+            } catch (e) {
+                reportError(e, { area: 'render', operation: 'streak-cache-read' });
+            }
             if (cachedStreak !== null) {
                 const num = parseInt(cachedStreak, 10) || 0;
                 document.getElementById('streakCounter').innerText = `🔥 ${num}`;
@@ -1965,7 +1982,12 @@
                 session.currentStreak = currentStreak;
                 session.longestStreak = longestStreak;
                 session.totalCompletedCycles = totalCompleted;
-                localStorage.setItem(`firstpaint_streak_${uid}`, String(currentStreak));
+                // S33: same report-and-continue posture for the write.
+                try {
+                    localStorage.setItem(`firstpaint_streak_${uid}`, String(currentStreak));
+                } catch (e) {
+                    reportError(e, { area: 'render', operation: 'streak-cache-write' });
+                }
                 updateStreakUI(currentStreak, longestStreak, totalCompleted);
             }, err => {
                 // S18: raw code first (Tier 1), existing banner unchanged.
@@ -2429,17 +2451,34 @@
             const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
 
             try {
+                // S27: the stages are instrumented as sub-operations — each
+                // reports at the point of failure, then the existing control
+                // flow aborts as it always did. The catch at the bottom
+                // replaces the console-only surface with a banner regular
+                // users can see (batches are atomic, so the banner's
+                // "nothing was changed" is a true statement).
                 let template = FALLBACK_DEFAULT_TASKS;
-                const cfgDoc = await db.collection('global_config').doc('system_defaults').get();
-                if (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks) && cfgDoc.data().defaultTasks.length > 0) {
-                    template = cfgDoc.data().defaultTasks;
+                try {
+                    const cfgDoc = await db.collection('global_config').doc('system_defaults').get();
+                    if (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks) && cfgDoc.data().defaultTasks.length > 0) {
+                        template = cfgDoc.data().defaultTasks;
+                    }
+                } catch (e) {
+                    reportError(e, { area: 'tasks', operation: 'reset-template-read', recovered: false });
+                    throw e;
                 }
 
-                const existingSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
-                const streakRef = famRef.collection('streaks').doc(uid);
-                const compRef = streakRef.collection('completions').doc(currentCycle);
-                const compDoc = await compRef.get();
-                const streakDoc = await streakRef.get();
+                let existingSnap, streakRef, compRef, compDoc, streakDoc;
+                try {
+                    existingSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
+                    streakRef = famRef.collection('streaks').doc(uid);
+                    compRef = streakRef.collection('completions').doc(currentCycle);
+                    compDoc = await compRef.get();
+                    streakDoc = await streakRef.get();
+                } catch (e) {
+                    reportError(e, { area: 'tasks', operation: 'reset-snapshot-reads', recovered: false });
+                    throw e;
+                }
 
                 const batch = db.batch();
                 existingSnap.forEach(d => batch.delete(d.ref));
@@ -2475,11 +2514,17 @@
                     }
                 }
 
-                await batch.commit();
+                try {
+                    await batch.commit();
+                } catch (e) {
+                    reportError(e, { area: 'tasks', operation: 'reset-batch-commit', recovered: false, writeAmbiguous: true });
+                    throw e;
+                }
                 logDebug(`Reset tasks to defaults and cleared completion doc for cycle ${currentCycle}.`);
                 logUsage('Reset Tasks to Defaults', `UID: ${uid}, Cycle: ${currentCycle}`);
             } catch (e) {
                 logDebug(`Reset tasks error: ${e.message}`, true);
+                showUserError(friendlyError(e, 'Resetting your tasks did not work. Nothing was changed — check your connection and try again.'));
             }
         }
 
@@ -2513,6 +2558,9 @@
             fList.innerHTML = 'Querying Firestore...';
             lList.innerHTML = 'Loading audit logs...';
 
+            // S28: a stage tag tracked through the three reads — the health
+            // badge could not express which read died; the report carries it.
+            let overviewStage = 'config';
             try {
                 const cfgRef = db.collection('global_config').doc('system_defaults');
                 const cfgDoc = await cfgRef.get();
@@ -2524,6 +2572,7 @@
                 document.getElementById('globalDefaultTasksInput').value = JSON.stringify(defTasks, null, 2);
                 document.getElementById('globalEarlyBufferInput').value = defBuffer;
 
+                overviewStage = 'members';
                 const memSnap = await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('members').get();
                 allRegisteredMembers = [];
                 memSnap.forEach(d => allRegisteredMembers.push({ id: d.id, ...d.data() }));
@@ -2549,12 +2598,14 @@
                         </div>`).join('');
                 }
 
+                overviewStage = 'audit';
                 const logsSnap = await db.collection('audit_logs').limit(20).get();
                 let logsArr = [];
                 logsSnap.forEach(d => logsArr.push(d.data()));
                 logsArr.sort((a, b) => ((b.timestamp && b.timestamp.seconds) || 0) - ((a.timestamp && a.timestamp.seconds) || 0));
                 lList.innerHTML = logsArr.map(l => `<div>[${esc(l.cycleId || '')}] <b>${esc(l.action)}</b> (${esc(l.user)}): ${esc(l.details)}</div>`).join('') || '<div>No audit logs yet.</div>';
             } catch (e) {
+                reportError(e, { area: 'render', operation: 'admin-overview-load', stage: overviewStage, memberCount: allRegisteredMembers.length });
                 badge.className = 'text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold';
                 badge.innerText = 'Firestore Error ❌';
                 logDebug(`Global overview error: ${e.message}`, true);
@@ -2564,11 +2615,21 @@
 
         async function saveGlobalBackendConfig() {
             if (isBlockedByImpersonationGuard('saveGlobalBackendConfig')) return;
+            // S29: the try is SPLIT. A parse failure keeps the existing
+            // alert — it IS the correct diagnosis there, and stays
+            // unreported. Only the write half is instrumented, so a write
+            // failure is no longer misdiagnosed as invalid JSON.
+            let parsed;
+            let earlyBufferMinutes;
             try {
-                const parsed = JSON.parse(document.getElementById('globalDefaultTasksInput').value);
+                parsed = JSON.parse(document.getElementById('globalDefaultTasksInput').value);
                 if (!Array.isArray(parsed)) throw new Error('Default tasks must be a JSON array.');
-                const earlyBufferMinutes = parseInt(document.getElementById('globalEarlyBufferInput').value, 10) || 60;
-
+                earlyBufferMinutes = parseInt(document.getElementById('globalEarlyBufferInput').value, 10) || 60;
+            } catch (e) {
+                alert('Invalid JSON in System Default Tasks: ' + e.message);
+                return;
+            }
+            try {
                 await db.collection('global_config').doc('system_defaults').set({
                     defaultTasks: parsed,
                     earlyBufferMinutes,
@@ -2577,32 +2638,51 @@
                 logDebug('Saved clean global_config/system_defaults to Firestore.');
                 alert('System Default Tasks & Buffer saved!');
             } catch (e) {
-                alert('Invalid JSON in System Default Tasks: ' + e.message);
+                reportError(e, { area: 'tasks', operation: 'admin-save-config', recovered: false, writeAmbiguous: true });
+                showUserError('Your settings could not be saved (the JSON was fine). Check your connection and try again.');
             }
         }
 
         async function adminDeleteSingleUser(uid, name) {
             if (isBlockedByImpersonationGuard('adminDeleteSingleUser')) return;
             if (!confirm(`Delete all profile, tasks, and streak data for ${name} (${uid})?`)) return;
-            const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
-            const tSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
-            const cSnap = await famRef.collection('streaks').doc(uid).collection('completions').get();
+            // S30: this destructive action had NO try/catch at all — a
+            // failure was total silence. The report carries target
+            // task/completion COUNTS only, never the target's identity.
+            // (The batch is atomic, so the banner's "nothing was removed"
+            // is true.)
+            let taskCount = 0;
+            let completionCount = 0;
+            try {
+                const famRef = db.collection('families').doc(DEFAULT_FAMILY_ID);
+                const tSnap = await famRef.collection('tasks').where('ownerId', '==', uid).get();
+                const cSnap = await famRef.collection('streaks').doc(uid).collection('completions').get();
+                taskCount = tSnap.size;
+                completionCount = cSnap.size;
 
-            const batch = db.batch();
-            tSnap.forEach(d => batch.delete(d.ref));
-            cSnap.forEach(d => batch.delete(d.ref));
-            batch.delete(famRef.collection('streaks').doc(uid));
-            batch.delete(famRef.collection('members').doc(uid));
-            await batch.commit();
+                const batch = db.batch();
+                tSnap.forEach(d => batch.delete(d.ref));
+                cSnap.forEach(d => batch.delete(d.ref));
+                batch.delete(famRef.collection('streaks').doc(uid));
+                batch.delete(famRef.collection('members').doc(uid));
+                await batch.commit();
 
-            logDebug(`Deleted user ${name} data.`);
-            await loadGlobalDatabaseOverview();
+                logDebug(`Deleted user ${name} data.`);
+                await loadGlobalDatabaseOverview();
+            } catch (e) {
+                reportError(e, { area: 'auth', operation: 'admin-delete-user', recovered: false, writeAmbiguous: true, taskCount: taskCount, completionCount: completionCount });
+                showUserError('That user could not be deleted. Nothing was removed.');
+            }
         }
 
         async function wipeAllDatabasesGlobal() {
             if (isBlockedByImpersonationGuard('wipeAllDatabasesGlobal')) return;
             if (!confirm("🚨 DANGER: This will permanently wipe ALL users, tasks, streaks, completions, and audit logs in Firestore. Continue?")) return;
             logDebug("Initiating full Firestore database wipe...");
+            // S31: progress counters so a partial wipe is describable at
+            // the log — the report and the alert both carry the stop point.
+            let familiesProcessed = 0;
+            let docsDeleted = 0;
             try {
                 const famSnap = await db.collection('families').get();
                 const familyIds = new Set([DEFAULT_FAMILY_ID]);
@@ -2611,29 +2691,31 @@
                 for (const fid of familyIds) {
                     const fRef = db.collection('families').doc(fid);
                     const mSnap = await fRef.collection('members').get();
-                    for (const m of mSnap.docs) await m.ref.delete();
+                    for (const m of mSnap.docs) { await m.ref.delete(); docsDeleted++; }
 
                     const tSnap = await fRef.collection('tasks').get();
-                    for (const t of tSnap.docs) await t.ref.delete();
+                    for (const t of tSnap.docs) { await t.ref.delete(); docsDeleted++; }
 
                     const sSnap = await fRef.collection('streaks').get();
                     for (const s of sSnap.docs) {
                         const cSnap = await s.ref.collection('completions').get();
-                        for (const c of cSnap.docs) await c.ref.delete();
-                        await s.ref.delete();
+                        for (const c of cSnap.docs) { await c.ref.delete(); docsDeleted++; }
+                        await s.ref.delete(); docsDeleted++;
                     }
-                    await fRef.delete();
+                    await fRef.delete(); docsDeleted++;
+                    familiesProcessed++;
                 }
 
                 const auditSnap = await db.collection('audit_logs').get();
-                for (const a of auditSnap.docs) await a.ref.delete();
+                for (const a of auditSnap.docs) { await a.ref.delete(); docsDeleted++; }
 
                 logDebug("All Firestore collections wiped clean.");
                 alert("All Firestore databases have been reset!");
                 await loadGlobalDatabaseOverview();
             } catch (e) {
+                reportError(e, { area: 'unknown', operation: 'admin-wipe-all', recovered: false, sessionDead: true, familiesProcessed: familiesProcessed, docsDeleted: docsDeleted });
                 logDebug(`DB Wipe Error: ${e.message}`, true);
-                alert("Error wiping DBs: " + e.message);
+                alert(`Error wiping DBs: stopped after ${familiesProcessed} families (${docsDeleted} documents deleted). ${e.message}`);
             }
         }
 
@@ -2743,7 +2825,7 @@
         }
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModals() { document.querySelectorAll('.fixed.inset-0').forEach(m => m.classList.add('hidden')); }
-        function testAlarmAlert() { if ("Notification" in window) Notification.requestPermission().then(p => { if (p === "granted") new Notification("🔔 Routine Alert", { body: "Notifications are active!" }); else alert("Permission denied."); }); }
+        function testAlarmAlert() { if ("Notification" in window) Notification.requestPermission().then(p => { if (p === "granted") new Notification("🔔 Routine Alert", { body: "Notifications are active!" }); else alert("Permission denied."); }).catch(e => reportError(e, { area: 'render', operation: 'notification-permission-test' })); }
     </script>
 <div class="gtranslate_wrapper" style="position:fixed;right:12px;bottom:12px;z-index:9999;"></div>
 <script>window.gtranslateSettings = {"default_language":"en","detect_browser_language":true,"wrapper_selector":".gtranslate_wrapper"}</script>
