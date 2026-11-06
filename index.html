@@ -2825,8 +2825,48 @@
         }
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModals() { document.querySelectorAll('.fixed.inset-0').forEach(m => m.classList.add('hidden')); }
-        function testAlarmAlert() { if ("Notification" in window) Notification.requestPermission().then(p => { if (p === "granted") new Notification("🔔 Routine Alert", { body: "Notifications are active!" }); else alert("Permission denied."); }).catch(e => reportError(e, { area: 'render', operation: 'notification-permission-test' })); }
+        // Notifications must go through the service worker: Android Chrome
+        // forbids the page-level Notification constructor (tabs and the
+        // installed PWA alike), so calling it from the page silently died
+        // on phones. sw.js is notification-only (no caching, no fetching).
+        async function showAppNotification(title, options) {
+            if (!("serviceWorker" in navigator)) throw new Error("Service workers are not available in this browser, so notifications cannot be shown.");
+            let reg = await navigator.serviceWorker.getRegistration();
+            if (!reg) reg = await navigator.serviceWorker.register("sw.js");
+            if (!reg.active) { await navigator.serviceWorker.ready; reg = await navigator.serviceWorker.getRegistration(); }
+            if (!reg || typeof reg.showNotification !== "function") throw new Error("The notification service worker is not ready yet. Reload the app and try again.");
+            const opts = Object.assign({}, options || {});
+            if (!opts.icon) opts.icon = "icon-192.png";
+            if (!opts.data) opts.data = { url: "./" };
+            await reg.showNotification(title, opts);
+        }
+        async function testAlarmAlert() {
+            if (!("Notification" in window)) { alert("Notifications are not supported in this browser."); return; }
+            try {
+                const p = await Notification.requestPermission();
+                if (p === "granted") await showAppNotification("🔔 Routine Alert", { body: "Notifications are active!", tag: "routines-test-notification" });
+                else alert("Permission denied.");
+            } catch (e) { reportError(e, { area: 'render', operation: 'notification-permission-test' }); }
+        }
     </script>
+<script>
+    // Register the notification service worker (sw.js). Relative path/scope
+    // so it works both at routines.andrewdhorowitz.com/ and under the
+    // github.io project path. Dependency-free and never throws: a failed
+    // registration must not break the app — notifications simply stay
+    // unavailable, and showAppNotification() retries registration on use.
+    (function () {
+        try {
+            if ("serviceWorker" in navigator) {
+                window.addEventListener("load", function () {
+                    navigator.serviceWorker.register("sw.js").catch(function (e) {
+                        try { console.warn("Service worker registration failed:", e); } catch (err) {}
+                    });
+                });
+            }
+        } catch (e) { /* registration is best-effort by design */ }
+    })();
+</script>
 <div class="gtranslate_wrapper" style="position:fixed;right:12px;bottom:12px;z-index:9999;"></div>
 <script>window.gtranslateSettings = {"default_language":"en","detect_browser_language":true,"wrapper_selector":".gtranslate_wrapper"}</script>
 <script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
