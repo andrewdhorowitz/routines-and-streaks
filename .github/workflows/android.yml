@@ -1,0 +1,149 @@
+name: Build Android (TWA)
+
+# Builds the Routines & Streaks Trusted Web Activity wrapper (android/).
+# Toolchain mirrors Homework Clarity / Home Helper / Text Bridge:
+# JDK 17, Android SDK API 36, Gradle 8.9. Signing uses the permanent RS
+# keystore held in repo secrets (RS_KEYSTORE_*), owner-generated and
+# deposited in a scheduled sitting; until those secrets exist the
+# release bundle is UNSIGNED — good for pipeline verification, never
+# for Play (the publish job refuses to run without them, and without
+# the PLAY_SERVICE_ACCOUNT_JSON secret).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the release bundle to the Play internal track (requires RS_KEYSTORE_* and PLAY_SERVICE_ACCOUNT_JSON secrets; inert without them)"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK (API 36)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Decode signing keystore (when the secret exists)
+        env:
+          RS_KEYSTORE_BASE64: ${{ secrets.RS_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$RS_KEYSTORE_BASE64" ]; then
+            echo "$RS_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/rs.jks"
+            echo "RS_KEYSTORE_PATH=$RUNNER_TEMP/rs.jks" >> "$GITHUB_ENV"
+            echo "Signing keystore present — release build will be signed."
+          else
+            echo "RS_KEYSTORE_* secrets are not set yet — release bundle will be UNSIGNED (pipeline verification only)."
+          fi
+
+      - name: Build debug APK and release bundle
+        env:
+          RS_KEYSTORE_PASSWORD: ${{ secrets.RS_KEYSTORE_PASSWORD }}
+          RS_KEY_ALIAS: ${{ secrets.RS_KEY_ALIAS }}
+          RS_KEY_PASSWORD: ${{ secrets.RS_KEY_PASSWORD }}
+        run: gradle assembleDebug bundleRelease --no-daemon --stacktrace
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: routines-and-streaks-twa-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: routines-and-streaks-twa-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+  # Manual Play publishing — runs ONLY on workflow_dispatch with
+  # publish=true, and fails fast with a clear message while either the
+  # RS_KEYSTORE_* secrets or the PLAY_SERVICE_ACCOUNT_JSON secret is
+  # absent. Never runs on push. Publishes the signed release bundle to
+  # the internal track via Gradle Play Publisher (publishBundle;
+  # track/status configured in android/app/build.gradle.kts).
+  publish:
+    name: Publish bundle to Play (internal track)
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK (API 36)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Decode signing keystore (required for publish)
+        env:
+          RS_KEYSTORE_BASE64: ${{ secrets.RS_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$RS_KEYSTORE_BASE64" ]; then
+            echo "::error::RS_KEYSTORE_BASE64 secret is not set — the upload keystore has not been deposited yet (owner step; see README in android/). Publishing stays inert."
+            exit 1
+          fi
+          echo "$RS_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/rs.jks"
+          echo "RS_KEYSTORE_PATH=$RUNNER_TEMP/rs.jks" >> "$GITHUB_ENV"
+
+      - name: Write Play service-account credentials
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON secret is not set — publishing stays inert until the play-publisher service-account key is added to this repo's secrets."
+            exit 1
+          fi
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-service-account.json"
+          echo "PLAY_SERVICE_ACCOUNT_JSON_PATH=$RUNNER_TEMP/play-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Publish release bundle to Play internal track
+        env:
+          RS_KEYSTORE_PASSWORD: ${{ secrets.RS_KEYSTORE_PASSWORD }}
+          RS_KEY_ALIAS: ${{ secrets.RS_KEY_ALIAS }}
+          RS_KEY_PASSWORD: ${{ secrets.RS_KEY_PASSWORD }}
+        run: gradle publishBundle --no-daemon --stacktrace

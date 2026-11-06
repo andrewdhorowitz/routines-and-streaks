@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Routines &amp; Streaks</string>
+    <string name="default_url">https://routines.andrewdhorowitz.com/</string>
+    <string name="asset_statements">[{"include": "https://routines.andrewdhorowitz.com/.well-known/assetlinks.json"}]</string>
+</resources>

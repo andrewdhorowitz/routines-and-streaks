@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.andrewdhorowitz.routinesandstreaks",
+      "sha256_cert_fingerprints": [
+        "28:CF:6B:B1:C7:BB:B9:57:97:B0:71:F2:A6:0D:22:3D:42:20:D1:B9:92:3B:E7:D8:11:0D:3B:70:6E:DC:66:11"
+      ]
+    }
+  }
+]
