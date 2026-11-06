@@ -66,10 +66,25 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v6
 
+      - name: Package site (tar keeps hidden dirs like .well-known)
+        run: |
+          # actions/upload-pages-artifact drops hidden files/dirs, which
+          # silently omitted .well-known/assetlinks.json (the Android
+          # TWA's Digital Asset Links file) from the Nov 6, 2026 deploy.
+          # Package the tarball ourselves so hidden paths ship;
+          # deploy-pages consumes an artifact named "github-pages"
+          # containing a tar. The grep asserts assetlinks is inside —
+          # a missing file fails the deploy loudly instead of 404ing.
+          tar --dereference --hard-dereference -cvf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git --exclude=.github .
+          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -F "./.well-known/assetlinks.json"
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
-          path: '.'
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
 
       - name: Deploy to GitHub Pages
         id: deployment
