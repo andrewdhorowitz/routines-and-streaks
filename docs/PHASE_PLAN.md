@@ -1,4 +1,4 @@
-# Routines & Streaks — Phase Plan (proposed Oct 26, 2026)
+# Routines Clarity — Phase Plan (proposed Oct 26, 2026)
 
 ## Verdict up front
 

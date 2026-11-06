@@ -1,4 +1,4 @@
-# Routines & Streaks — Android (Trusted Web Activity)
+# Routines Clarity — Android (Trusted Web Activity)
 
 A thin Android wrapper around the live web app at
 https://routines.andrewdhorowitz.com, so the app can ship through

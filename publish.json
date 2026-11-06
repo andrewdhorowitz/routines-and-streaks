@@ -2,7 +2,7 @@
   "first_released": "2026-10-01",
   "last_released": "2026-10-30",
   "private_hosts": [],
-  "project": "Routines & Streaks",
+  "project": "Routines Clarity",
   "public_urls": {
     "demo": null,
     "docs": "https://routines.andrewdhorowitz.com/docs/architecture.md",
@@ -11,7 +11,7 @@
   },
   "release_state": "testing",
   "section": {
-    "blurb": "Routines and streaks web app \u2014 daily routines on a noon cycle, persistent streaks, Google sign-in.",
+    "blurb": "Routines Clarity web app \u2014 daily routines on a noon cycle, persistent streaks, Google sign-in.",
     "family_visible": false,
     "group": "projects",
     "include": true

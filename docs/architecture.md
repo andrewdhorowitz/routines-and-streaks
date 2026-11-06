@@ -1,6 +1,6 @@
-# Routines & Streaks — Architecture
+# Routines Clarity — Architecture
 
-C4-lite diagrams for Routines & Streaks, drawn from the app as it is
+C4-lite diagrams for Routines Clarity, drawn from the app as it is
 today — **Version 1, declared done Oct 29, 2026**: a single-file web
 app (`index.html`) on GitHub Pages, Google sign-in via Firebase Auth,
 all state in Cloud Firestore, the deploy workflow injecting the
@@ -33,12 +33,12 @@ Who uses the app, and which outside systems it touches.
 
 ```mermaid
 C4Context
-    title Routines & Streaks - System Context (Version 1, test stage)
+    title Routines Clarity - System Context (Version 1, test stage)
 
     Person(user, "User", "Signs in with Google and runs the daily routine: evening and morning tasks, check-offs, and a streak that grows per completed cycle.")
     Person(admin, "Super Admin (owner)", "Owns the app. Manages the global default-task template, admin seats, and the danger zone.")
 
-    System(app, "Routines & Streaks", "Single-page web app running a noon-to-noon routine cycle: tasks with subtasks, an early check-off window, and persistent per-member streaks.")
+    System(app, "Routines Clarity", "Single-page web app running a noon-to-noon routine cycle: tasks with subtasks, an early check-off window, and persistent per-member streaks.")
 
     System_Ext(gauth, "Firebase Auth", "Google sign-in: popup-first, redirect as fallback.")
     System_Ext(firestore, "Cloud Firestore", "All app state. The deployed security rules are the enforcement boundary.")
@@ -66,7 +66,7 @@ is an external service. The Error Reporter and its store are
 
 ```mermaid
 C4Container
-    title Routines & Streaks - Container View (Version 1 + proposed Error Reporter)
+    title Routines Clarity - Container View (Version 1 + proposed Error Reporter)
 
     Person(user, "User", "Signed-in user.")
     Person(admin, "Super Admin (owner)", "Owner, via the admin registry.")
@@ -75,7 +75,7 @@ C4Container
     System_Ext(cdn, "Public CDNs", "Tailwind, Font Awesome, canvas-confetti; GTranslate widget.")
     Container_Ext(browser, "Browser Platform", "localStorage first-paint streak cache; Notifications API; clipboard.")
 
-    System_Boundary(app, "Routines & Streaks - index.html, runs in the browser") {
+    System_Boundary(app, "Routines Clarity - index.html, runs in the browser") {
 
         Container(boot, "Boot and Config", "JavaScript module, in-page", "Loads the Firebase SDK from CDN, initialises the app, subscribes to the global config.")
         Container(auth, "Auth Controller", "JavaScript module, in-page", "Popup-first Google sign-in with a 10-second watchdog and redirect fallback; resolves the session role from the admin registry at sign-in.")
@@ -138,13 +138,13 @@ run: the reporter inside the served page, its store inside Firebase.
 
 ```mermaid
 C4Deployment
-    title Routines & Streaks - Deployment View (Version 1 + proposed Error Reporter)
+    title Routines Clarity - Deployment View (Version 1 + proposed Error Reporter)
 
     Person(user, "User", "Signs in with Google; runs the routine.")
     Person(admin, "Super Admin (owner)", "Manages the template, seats, and danger zone.")
 
     Deployment_Node(github, "GitHub", "Repository hosting, Actions, Pages") {
-        Container(repo, "Routines & Streaks Repo", "Git repository", "Canonical source: the single-file app, spec, and diagram. Public showroom repo; the full development history lives in a private archive repo.")
+        Container(repo, "Routines Clarity Repo", "Git repository", "Canonical source: the single-file app, spec, and diagram. Public showroom repo; the full development history lives in a private archive repo.")
         Container(deploy, "Deploy and CI Workflows", "GitHub Actions - worker", "On push to main: validates the page, injects the Firebase API key from the repo secret in place of the placeholder, and publishes to GitHub Pages. Companion checks: fleet CI, link check, Lighthouse.")
         Container(page, "Web App (index.html)", "Static HTML / JavaScript - UI screen", "The entire app in one file, served by GitHub Pages; the modules of the Container view run from it in the visitor's browser.")
         Container(reporter, "Error Reporter (PROPOSED)", "JavaScript module, in-page - worker", "PROPOSED, not in Version 1: ships inside the page once the kit error-reporting standard lands.")
@@ -192,7 +192,7 @@ C4Deployment
 
 ### Shape and host legend
 
-| Visual | Means | Routines & Streaks examples |
+| Visual | Means | Routines Clarity examples |
 |---|---|---|
 | Person figure | A human user | User, Super Admin (owner) |
 | Browser window | A user screen / UI | Web App (index.html), Task UI, Super Admin Portal |
@@ -200,7 +200,7 @@ C4Deployment
 | Gear | A worker / background job | Deploy and CI Workflows, Seed Admin Script, Error Reporter (PROPOSED) |
 | Cylinder | A database / data store | Members, Tasks, Streaks and Completions, Global Config, Admin Registry, Audit Logs, Error Reports (PROPOSED) |
 | Cloud | An external hosted service | Firebase Auth, Cloud Firestore, Public CDNs |
-| Repository | A source / code store | Routines & Streaks Repo |
+| Repository | A source / code store | Routines Clarity Repo |
 
 Hosts: **GitHub** (repo, Actions, Pages), **Google Firebase** (auth +
 database), **User's device** (browser cache), **Owner's workstation**

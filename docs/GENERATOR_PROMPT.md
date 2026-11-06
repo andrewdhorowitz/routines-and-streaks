@@ -1,4 +1,4 @@
-# Code-Generator Prompt — Routines & Streaks (v3)
+# Code-Generator Prompt — Routines Clarity (v3)
 
 ## Links (all live as of Oct 26, 2026)
 

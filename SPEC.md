@@ -1,4 +1,4 @@
-# Routines & Streaks — Design Spec
+# Routines Clarity — Design Spec
 
 - **Repo:** [andrewdhorowitz/routines-and-streaks](https://github.com/andrewdhorowitz/routines-and-streaks)
 - **Live (test) site:** https://routines.andrewdhorowitz.com/

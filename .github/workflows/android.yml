@@ -1,6 +1,6 @@
 name: Build Android (TWA)
 
-# Builds the Routines & Streaks Trusted Web Activity wrapper (android/).
+# Builds the Routines Clarity Trusted Web Activity wrapper (android/).
 # Toolchain mirrors Homework Clarity / Home Helper / Text Bridge:
 # JDK 17, Android SDK API 36, Gradle 8.9. Signing uses the permanent RS
 # keystore held in repo secrets (RS_KEYSTORE_*), owner-generated and

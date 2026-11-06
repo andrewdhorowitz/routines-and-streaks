@@ -1,4 +1,4 @@
-# Master Architecture & Design Specification: Routines & Streaks PWA — Improved Edition (v3.3, Phase 1 — revised build)
+# Master Architecture & Design Specification: Routines Clarity PWA — Improved Edition (v3.3, Phase 1 — revised build)
 
 **What this is:** Andrew's complete original Master Design Specification with the Oct 25–26 review improvements merged in (v3/v3.1), now updated with the **Phase 1 "Solo Mode"** decisions of Oct 26, 2026, which are the current build target. Phase definitions: `docs/PHASE_PLAN.md`. Detailed companion: repo `SPEC.md` v0.4. Every change from the original is in the change log at the end.
 

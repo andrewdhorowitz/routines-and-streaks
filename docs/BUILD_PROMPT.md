@@ -1,4 +1,4 @@
-# Build Prompt — Routines & Streaks (original prompt, improved edition)
+# Build Prompt — Routines Clarity (original prompt, improved edition)
 
 **What this is:** a from-scratch generation prompt for the Routines & Streaks — the original build prompt's full scope and feature set, merged with every improvement that came out of the Oct 25–26 review (SPEC.md v0.3). Use it to regenerate the app from zero, or to rebuild a section faithfully. For *patching the existing app* instead, use `docs/GENERATOR_PROMPT.md` (the five-fix prompt).
 

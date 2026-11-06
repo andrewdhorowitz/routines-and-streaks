@@ -132,7 +132,7 @@
     }
   },
   "panel_body": "One static file does everything: the <b>page</b> is served by GitHub Pages and runs in the visitor's browser, <b>Firebase Auth</b> signs users in, and <b>Firestore</b> holds every store as cylinders. The <b>deploy workflow</b> is a gear on GitHub Actions; the <b>seed script</b> is a gear on the owner's workstation. Click any box for its job.",
-  "project": "Routines & Streaks",
+  "project": "Routines Clarity",
   "zones": {
     "device": {
       "sub": "Any modern browser",

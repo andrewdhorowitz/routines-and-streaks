@@ -1,4 +1,4 @@
-# Routines & Streaks
+# Routines Clarity
 
 [![Deploy App Status](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/deploy.yml/badge.svg)](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/deploy.yml) [![CI](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/ci.yml) [![Lighthouse](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/lighthouse.yml) [![Links](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/links.yml/badge.svg)](https://github.com/andrewdhorowitz/routines-and-streaks/actions/workflows/links.yml)
 
