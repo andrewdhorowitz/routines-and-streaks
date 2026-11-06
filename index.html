@@ -222,6 +222,10 @@
                 <button data-action="test-notification" class="w-full bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold shadow">
                     <i class="fa-solid fa-bell mr-1"></i> Test Browser Notification
                 </button>
+                <button data-action="test-notification-delayed" class="w-full bg-amber-700 text-white py-2.5 rounded-xl text-xs font-bold shadow">
+                    <i class="fa-solid fa-hourglass-half mr-1"></i> Test Notification in 30s (then switch apps)
+                </button>
+                <p class="text-xs text-amber-800 font-semibold hidden" id="notificationTestStatus"></p>
             </div>
         </div>
     </main>
@@ -2779,6 +2783,8 @@
                 triggerCelebration();
             } else if (action === 'test-notification') {
                 testAlarmAlert();
+            } else if (action === 'test-notification-delayed') {
+                testAlarmAlertDelayed();
             } else if (action === 'close-modals') {
                 closeModals();
             } else if (action === 'save-global-config') {
@@ -2812,8 +2818,26 @@
             let p = "Desktop Browser"; let inst = "Click the install icon in your address bar to install.";
             if (/android/i.test(ua)) { p = "Android Device"; inst = "Tap the 3-dot menu and select 'Add to Home screen'."; }
             else if (/iPad|iPhone|iPod/.test(ua)) { p = "iPhone / iPad (iOS)"; inst = "Tap Share in Safari and select 'Add to Home Screen'."; }
+            // Already running as the installed app? Then the install
+            // instructions are noise — Andrew is past that step. Detect
+            // standalone display mode (Android/desktop PWA), iOS's
+            // navigator.standalone, and launches from an Android app.
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.referrer.startsWith('android-app://');
+            const instEl = document.getElementById('platformInstallInstructions');
+            if (isStandalone) {
+                p += " — Installed App";
+                instEl.innerText = "You're using the installed app.";
+            } else {
+                instEl.innerText = inst;
+            }
             document.getElementById('detectedPlatformInfo').innerText = `Detected: ${p}`;
-            document.getElementById('platformInstallInstructions').innerText = inst;
+            // Re-check if the display mode changes while the page is open
+            // (e.g. the app gets installed and relaunched in place).
+            if (!detectPlatform._modeListener) {
+                detectPlatform._modeListener = true;
+                const modeQuery = window.matchMedia('(display-mode: standalone)');
+                if (modeQuery.addEventListener) modeQuery.addEventListener('change', detectPlatform);
+            }
         }
 
         function switchTab(t) {
@@ -2840,13 +2864,47 @@
             if (!opts.data) opts.data = { url: "./" };
             await reg.showNotification(title, opts);
         }
+        // Readable local time for test notifications — every test carries
+        // its own timestamp and a unique tag (Date.now()), so successive
+        // tests are distinguishable in the shade and never replace each
+        // other (same-tag notifications collapse into one).
+        function formatTestTime(d) {
+            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        }
         async function testAlarmAlert() {
             if (!("Notification" in window)) { alert("Notifications are not supported in this browser."); return; }
             try {
                 const p = await Notification.requestPermission();
-                if (p === "granted") await showAppNotification("🔔 Routine Alert", { body: "Notifications are active!", tag: "routines-test-notification" });
+                if (p === "granted") {
+                    const now = new Date();
+                    await showAppNotification("🔔 Routine Alert", { body: "Notifications are active! Test fired at " + formatTestTime(now) + ".", tag: "routines-test-notification-" + now.getTime() });
+                }
                 else alert("Permission denied.");
             } catch (e) { reportError(e, { area: 'render', operation: 'notification-permission-test' }); }
+        }
+        // Delayed test: proves notifications land when Routines is NOT the
+        // foreground app (the immediate test can't — Android posts a
+        // foreground app's notifications silently to the shade). The 30s
+        // timer is a plain page setTimeout, so the app must stay alive in
+        // the background during the wait — swiping it away kills the timer.
+        async function testAlarmAlertDelayed() {
+            if (!("Notification" in window)) { alert("Notifications are not supported in this browser."); return; }
+            try {
+                const p = await Notification.requestPermission();
+                if (p !== "granted") { alert("Permission denied."); return; }
+                const fireAt = new Date(Date.now() + 30000);
+                const statusEl = document.getElementById('notificationTestStatus');
+                if (statusEl) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.innerText = "Delayed test scheduled — it will fire at " + formatTestTime(fireAt) + " (in 30 seconds). Switch apps or lock your phone now. Keep Routines alive in the background — don't swipe it away, or the timer dies with it.";
+                }
+                setTimeout(async () => {
+                    try {
+                        const firedAt = new Date();
+                        await showAppNotification("🔔 Routine Alert (delayed test)", { body: "Delayed test fired at " + formatTestTime(firedAt) + ". Background notifications work!", tag: "routines-delayed-test-notification-" + firedAt.getTime() });
+                    } catch (e) { reportError(e, { area: 'render', operation: 'notification-delayed-test' }); }
+                }, 30000);
+            } catch (e) { reportError(e, { area: 'render', operation: 'notification-delayed-test-schedule' }); }
         }
     </script>
 <script>
