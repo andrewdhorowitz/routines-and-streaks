@@ -1,0 +1,84 @@
+{
+  "package": "com.andrewdhorowitz.routinesandstreaks",
+  "old_title_expected": "Routines & Streaks",
+  "new_title": "Routines Clarity",
+  "language": "en-US",
+  "started_at": "2026-11-07T02:20:59.952675+00:00",
+  "service_account_email": "play-publisher@play-publisher-513614.iam.gserviceaccount.com",
+  "steps": [
+    {
+      "step": "edits.insert",
+      "http_status": 200,
+      "body": {
+        "id": "04709876840566455291",
+        "expiryTimeSeconds": "1794025260"
+      }
+    },
+    {
+      "step": "edits.listings.list",
+      "http_status": 200,
+      "body": {
+        "kind": "androidpublisher#listingsListResponse",
+        "listings": [
+          {
+            "language": "en-US",
+            "title": "Routines & Streaks"
+          }
+        ]
+      }
+    },
+    {
+      "step": "edits.listings.update",
+      "http_status": 200,
+      "body": {
+        "language": "en-US",
+        "title": "Routines Clarity"
+      }
+    },
+    {
+      "step": "edits.commit",
+      "http_status": 200,
+      "body": {
+        "id": "04709876840566455291",
+        "expiryTimeSeconds": "1794025260"
+      }
+    },
+    {
+      "step": "verify.edits.insert",
+      "http_status": 200,
+      "body": {
+        "id": "12679679851095898342",
+        "expiryTimeSeconds": "1794025261"
+      }
+    },
+    {
+      "step": "verify.edits.listings.list",
+      "http_status": 200,
+      "body": {
+        "kind": "androidpublisher#listingsListResponse",
+        "listings": [
+          {
+            "language": "en-US",
+            "title": "Routines Clarity"
+          }
+        ]
+      }
+    },
+    {
+      "step": "verify.edits.delete",
+      "http_status": 204
+    }
+  ],
+  "before_title": "Routines & Streaks",
+  "update_response_title": "Routines Clarity",
+  "commit_http_status": 200,
+  "verified_title": "Routines Clarity",
+  "success": true,
+  "error": null,
+  "edit_id": "04709876840566455291",
+  "listing_before": {
+    "language": "en-US",
+    "title": "Routines & Streaks"
+  },
+  "finished_at": "2026-11-07T02:21:02.576373+00:00"
+}
