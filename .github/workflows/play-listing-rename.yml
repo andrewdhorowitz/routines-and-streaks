@@ -1,0 +1,201 @@
+name: Play listing rename (Routines Clarity)
+
+# One-off, single-purpose workflow (manual dispatch only).
+# Renames the Play store listing title for
+# com.andrewdhorowitz.routinesandstreaks from "Routines & Streaks" to
+# "Routines Clarity", authenticating with the play-publisher service
+# account (PLAY_SERVICE_ACCOUNT_JSON), which holds store-presence
+# rights. The play-api SA cannot commit listing edits (403), so this
+# runs with play-publisher instead. Full outcome (HTTP statuses,
+# before/after titles, errors verbatim) is written to
+# play-listing/results.json and committed back to this repo.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install google-auth requests
+
+      - name: Rename listing title and verify
+        env:
+          PLAY_SA_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python3 - <<'PYEOF'
+          import datetime
+          import json
+          import os
+          import sys
+
+          import requests
+          from google.auth.transport.requests import Request
+          from google.oauth2 import service_account
+
+          PACKAGE = "com.andrewdhorowitz.routinesandstreaks"
+          OLD_TITLE = "Routines & Streaks"
+          NEW_TITLE = "Routines Clarity"
+          LANGUAGE = "en-US"
+          BASE = "https://androidpublisher.googleapis.com/androidpublisher/v3"
+          RESULTS_PATH = "play-listing/results.json"
+
+          results = {
+              "package": PACKAGE,
+              "old_title_expected": OLD_TITLE,
+              "new_title": NEW_TITLE,
+              "language": LANGUAGE,
+              "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "service_account_email": None,
+              "steps": [],
+              "before_title": None,
+              "update_response_title": None,
+              "commit_http_status": None,
+              "verified_title": None,
+              "success": False,
+              "error": None,
+          }
+
+          def save():
+              os.makedirs(os.path.dirname(RESULTS_PATH), exist_ok=True)
+              results["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+              with open(RESULTS_PATH, "w", encoding="utf-8") as fh:
+                  json.dump(results, fh, indent=2, ensure_ascii=False)
+
+          def record(step, status, body=None):
+              entry = {"step": step, "http_status": status}
+              if body is not None:
+                  entry["body"] = body
+              results["steps"].append(entry)
+              print(f"{step}: HTTP {status}", flush=True)
+
+          def main():
+              sa_info = json.loads(os.environ["PLAY_SA_JSON"])
+              results["service_account_email"] = sa_info.get("client_email")
+              creds = service_account.Credentials.from_service_account_info(
+                  sa_info, scopes=["https://www.googleapis.com/auth/androidpublisher"]
+              )
+              creds.refresh(Request())
+              session = requests.Session()
+              session.headers.update({
+                  "Authorization": f"Bearer {creds.token}",
+                  "Content-Type": "application/json",
+              })
+
+              def delete_edit(eid, label):
+                  rd = session.delete(f"{BASE}/applications/{PACKAGE}/edits/{eid}", timeout=60)
+                  record(label, rd.status_code)
+
+              # 1. Insert edit
+              r = session.post(f"{BASE}/applications/{PACKAGE}/edits", json={}, timeout=60)
+              body = r.json() if r.content else None
+              record("edits.insert", r.status_code, body)
+              if r.status_code != 200:
+                  results["error"] = f"edits.insert failed: HTTP {r.status_code}"
+                  return 1
+              edit_id = body["id"]
+              results["edit_id"] = edit_id
+
+              # 2. List listings and confirm the current title before touching anything
+              r = session.get(f"{BASE}/applications/{PACKAGE}/edits/{edit_id}/listings", timeout=60)
+              body = r.json() if r.content else None
+              record("edits.listings.list", r.status_code, body)
+              if r.status_code != 200:
+                  results["error"] = f"edits.listings.list failed: HTTP {r.status_code}"
+                  delete_edit(edit_id, "edits.delete (cleanup after list failure)")
+                  return 1
+              listings = (body or {}).get("listings", [])
+              listing = next((x for x in listings if x.get("language") == LANGUAGE), None)
+              if listing is None:
+                  results["error"] = "No en-US listing found; languages present: " + str([x.get("language") for x in listings])
+                  delete_edit(edit_id, "edits.delete (cleanup, no en-US listing)")
+                  return 1
+              results["before_title"] = listing.get("title")
+              results["listing_before"] = listing
+              if listing.get("title") != OLD_TITLE:
+                  results["error"] = f"ABORT: current title is {listing.get('title')!r}, expected {OLD_TITLE!r}; no changes made."
+                  delete_edit(edit_id, "edits.delete (cleanup after abort)")
+                  return 1
+
+              # 3. Update the listing with ONLY the title changed (full object written back)
+              new_listing = dict(listing)
+              new_listing["title"] = NEW_TITLE
+              r = session.put(f"{BASE}/applications/{PACKAGE}/edits/{edit_id}/listings/{LANGUAGE}", json=new_listing, timeout=60)
+              body = r.json() if r.content else None
+              record("edits.listings.update", r.status_code, body)
+              if r.status_code != 200:
+                  results["error"] = f"edits.listings.update failed: HTTP {r.status_code}"
+                  delete_edit(edit_id, "edits.delete (cleanup after update failure)")
+                  return 1
+              results["update_response_title"] = (body or {}).get("title")
+
+              # 4. Commit the edit (one retry with changesNotSentForReview=true on a review-related 400; never retried on 403)
+              r = session.post(f"{BASE}/applications/{PACKAGE}/edits/{edit_id}:commit", timeout=60)
+              body = r.json() if r.content else None
+              record("edits.commit", r.status_code, body)
+              if r.status_code == 400 and body and "review" in json.dumps(body).lower():
+                  r = session.post(f"{BASE}/applications/{PACKAGE}/edits/{edit_id}:commit", params={"changesNotSentForReview": "true"}, timeout=60)
+                  body = r.json() if r.content else None
+                  record("edits.commit?changesNotSentForReview=true", r.status_code, body)
+              results["commit_http_status"] = r.status_code
+              if r.status_code != 200:
+                  results["error"] = f"edits.commit failed: HTTP {r.status_code}: {json.dumps(body)}"
+                  return 1
+
+              # 5. Independent verification: fresh edit, read the live listing, delete the edit
+              r = session.post(f"{BASE}/applications/{PACKAGE}/edits", json={}, timeout=60)
+              body = r.json() if r.content else None
+              record("verify.edits.insert", r.status_code, body)
+              if r.status_code != 200:
+                  results["error"] = f"verification edits.insert failed: HTTP {r.status_code}"
+                  return 1
+              verify_edit = body["id"]
+              r = session.get(f"{BASE}/applications/{PACKAGE}/edits/{verify_edit}/listings", timeout=60)
+              body = r.json() if r.content else None
+              record("verify.edits.listings.list", r.status_code, body)
+              vlisting = next((x for x in (body or {}).get("listings", []) if x.get("language") == LANGUAGE), None)
+              results["verified_title"] = vlisting.get("title") if vlisting else None
+              rd = session.delete(f"{BASE}/applications/{PACKAGE}/edits/{verify_edit}", timeout=60)
+              record("verify.edits.delete", rd.status_code)
+              results["success"] = results["verified_title"] == NEW_TITLE
+              if not results["success"]:
+                  results["error"] = f"Verification mismatch: live title is {results['verified_title']!r}, expected {NEW_TITLE!r}"
+                  return 1
+              return 0
+
+          if __name__ == "__main__":
+              code = 1
+              try:
+                  code = main()
+              except Exception as exc:
+                  import traceback
+                  results["error"] = f"{type(exc).__name__}: {exc}"
+                  results["traceback"] = traceback.format_exc()
+              save()
+              sys.exit(code)
+          PYEOF
+
+      - name: Commit results
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f play-listing/results.json ]; then
+            git add play-listing/results.json
+            git commit -m "Play listing rename results" || echo "nothing to commit"
+            git push
+          else
+            echo "No results file was produced."
+          fi
