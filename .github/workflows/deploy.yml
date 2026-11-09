@@ -80,7 +80,7 @@ jobs:
           tar -tf "$RUNNER_TEMP/artifact.tar" | grep -F "./.well-known/assetlinks.json"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar
