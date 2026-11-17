@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fleet R2 (Nov 17, 2026): the settings surface behind the wrapper's
+  native Android settings entry (Settings Placement Rule, pattern 26),
+  hosted by SettingsActivity. Routines & Streaks' declared settings
+  surface is "No settings page" (Andrew, Nov 17, 2026) — the app is
+  just-use — so this surface adds no configuration of its own and
+  stores nothing: it opens the app itself, links the published
+  Privacy Policy, and shows the version. Nothing here invents a
+  setting the app does not have.
+-->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <Preference
+        android:key="pref_open_app"
+        android:summary="@string/prefs_open_app_summary"
+        android:title="@string/prefs_open_app_title" />
+
+    <Preference
+        android:key="pref_privacy"
+        android:summary="@string/prefs_privacy_summary"
+        android:title="@string/prefs_privacy_title" />
+
+    <Preference
+        android:key="pref_version"
+        android:selectable="false"
+        android:title="@string/prefs_version_title" />
+
+</PreferenceScreen>

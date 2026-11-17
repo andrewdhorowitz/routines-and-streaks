@@ -3,4 +3,10 @@
     <string name="app_name">Routines Clarity</string>
     <string name="default_url">https://routines.andrewdhorowitz.com/</string>
     <string name="asset_statements">[{"include": "https://routines.andrewdhorowitz.com/.well-known/assetlinks.json"}]</string>
+    <string name="settings_title">Routines &amp; Streaks settings</string>
+    <string name="prefs_open_app_title">Open Routines &amp; Streaks</string>
+    <string name="prefs_open_app_summary">The app itself — there are no settings to configure</string>
+    <string name="prefs_privacy_title">Privacy Policy</string>
+    <string name="prefs_privacy_summary">How Routines &amp; Streaks handles your data</string>
+    <string name="prefs_version_title">Version</string>
 </resources>

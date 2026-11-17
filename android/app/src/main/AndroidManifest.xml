@@ -47,6 +47,35 @@
             </intent-filter>
         </activity>
 
+        <!-- Native settings entry (fleet R2, Nov 17, 2026; Settings
+             Placement Rule, pattern 26): registered for
+             android.intent.action.APPLICATION_PREFERENCES (the gear
+             on this app's system Settings page) and for Samsung's
+             SEC_APPLICATION_SETTINGS action, so the app is findable
+             from system Settings. Routines & Streaks' declared
+             settings surface is "No settings page" (Andrew, Nov 17,
+             2026), so SettingsActivity offers no configuration —
+             it opens the app itself, links the Privacy Policy, and
+             shows the version. Registration follows the fleet
+             standard; whether the entry surfaces on a given device
+             is the shared fleet defect track (registered-but-not-
+             showing on Andrew's phone for the other fleet apps) and
+             is verified on device, not assumed. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/settings_title"
+            android:theme="@android:style/Theme.Material.Light">
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.sec.android.intent.action.SEC_APPLICATION_SETTINGS" />
+                <category android:name="com.sec.android.intent.category.SEC_APPLICATION_SETTINGS" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name="com.google.androidbrowserhelper.trusted.DelegationService"
             android:exported="true">
