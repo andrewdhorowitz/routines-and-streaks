@@ -71,13 +71,16 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <!-- Fleet label model (pattern 29): the ONE base string file. Loaded in head so
+         window.L exists before every body script; static copy binds at DOMContentLoaded. -->
+    <script src="strings.js"></script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 pb-44">
 
     <!-- Active In-Place Impersonation Banner -->
     <div id="impersonationBanner" class="bg-amber-600 text-white px-4 py-2 text-xs font-bold text-center flex justify-between items-center shadow-md hidden z-50 sticky top-0">
-        <span><span id="bannerIcon">👑</span> <span id="bannerTitle">SUPER ADMIN IMPERSONATION:</span> Viewing as <span id="impersonatedUserLabel" class="underline font-black"></span> (<span id="impersonatedRoleLabel"></span>)</span>
-        <button id="exitImpersonationBtn" data-action="exit-impersonation" class="bg-white text-amber-800 px-2.5 py-1 rounded text-[10px] font-extrabold shadow hover:bg-amber-50">Exit Impersonation</button>
+        <span><span id="bannerIcon">👑</span> <span id="bannerTitle" data-i18n="impersonation_banner_title">SUPER ADMIN IMPERSONATION:</span> <span data-i18n="impersonation_viewing_as">Viewing as</span> <span id="impersonatedUserLabel" class="underline font-black"></span> (<span id="impersonatedRoleLabel"></span>)</span>
+        <button id="exitImpersonationBtn" data-action="exit-impersonation" data-i18n="impersonation_exit" class="bg-white text-amber-800 px-2.5 py-1 rounded text-[10px] font-extrabold shadow hover:bg-amber-50">Exit Impersonation</button>
     </div>
 
     <!-- Header -->
@@ -85,18 +88,18 @@
         <div class="max-w-md mx-auto flex justify-between items-center">
             <div>
                 <h1 class="text-xl font-bold text-slate-900" id="userNameDisplay">Routines Clarity</h1>
-                <p class="text-xs text-slate-500"><i class="fa-solid fa-user-tag text-[10px] mr-1"></i><span id="userRoleBadge">Not Signed In</span></p>
+                <p class="text-xs text-slate-500"><i class="fa-solid fa-user-tag text-[10px] mr-1"></i><span id="userRoleBadge" data-i18n="role_not_signed_in">Not Signed In</span></p>
             </div>
             <div class="flex items-center space-x-1.5">
                 <!-- Shield is ALWAYS visible unless actively impersonating a user -->
-                <button id="adminShieldBtn" data-action="shield-clicked" class="text-amber-500 hover:text-amber-700 p-1.5 transition" title="Super Admin Portal">
+                <button id="adminShieldBtn" data-action="shield-clicked" data-i18n-attr="title:admin_shield_title" class="text-amber-500 hover:text-amber-700 p-1.5 transition" title="Super Admin Portal">
                     <i class="fa-solid fa-shield-halved text-base"></i>
                 </button>
                 <div id="navTabs" class="flex items-center space-x-1 hidden">
-                    <button data-action="switch-tab" data-tab="dashboard" id="navDashboard" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white">Today</button>
-                    <button data-action="switch-tab" data-tab="streaks" id="navStreaks" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200">Streaks</button>
-                    <button data-action="switch-tab" data-tab="info" id="navInfo" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200">Info</button>
-                    <button data-action="sign-out" id="signOutBtn" class="px-2 py-1.5 rounded-lg text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200" title="Sign Out"><i class="fa-solid fa-right-from-bracket"></i></button>
+                    <button data-action="switch-tab" data-tab="dashboard" id="navDashboard" data-i18n="nav_today" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white">Today</button>
+                    <button data-action="switch-tab" data-tab="streaks" id="navStreaks" data-i18n="nav_streaks" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200">Streaks</button>
+                    <button data-action="switch-tab" data-tab="info" id="navInfo" data-i18n="nav_info" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200">Info</button>
+                    <button data-action="sign-out" id="signOutBtn" data-i18n-attr="title:nav_sign_out_title" class="px-2 py-1.5 rounded-lg text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200" title="Sign Out"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
             </div>
         </div>
@@ -106,44 +109,44 @@
 
         <!-- Demo Mode Banner (visible only in demo mode) -->
         <div id="demoBanner" class="hidden bg-amber-400 text-amber-950 p-3 rounded-2xl shadow flex items-center justify-between">
-            <span class="text-xs font-bold"><i class="fa-solid fa-eye mr-1"></i> Demo mode — nothing is saved</span>
-            <button type="button" data-action="demo-sign-in" class="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow">Sign in</button>
+            <span class="text-xs font-bold"><i class="fa-solid fa-eye mr-1"></i> <span data-i18n="demo_banner_text">Demo mode — nothing is saved</span></span>
+            <button type="button" data-action="demo-sign-in" data-i18n="sign_in" class="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow">Sign in</button>
         </div>
 
         <!-- Onboarding / Auth Section (Phase 1: Google Sign-In Only + Welcome Provisioning) -->
         <div id="authSection" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
             <div id="googleSignInView" class="space-y-4">
-                <h2 class="text-xl font-bold text-slate-900 text-center">Welcome to Routines Clarity</h2>
-                <p class="text-xs text-slate-500 text-center" id="authSubtitle">Sign in with Google to track your evening-to-morning routine cycle and build daily streaks.</p>
+                <h2 class="text-xl font-bold text-slate-900 text-center" data-i18n="auth_welcome_title">Welcome to Routines Clarity</h2>
+                <p class="text-xs text-slate-500 text-center" id="authSubtitle" data-i18n="auth_subtitle">Sign in with Google to track your evening-to-morning routine cycle and build daily streaks.</p>
                 <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
                     <i class="fa-brands fa-google text-red-400 text-base"></i>
-                    <span>Continue with Google</span>
+                    <span data-i18n="auth_continue_google">Continue with Google</span>
                 </button>
                 <div class="flex items-center space-x-2">
                     <span class="flex-1 border-t border-slate-100"></span>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase">or</span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase" data-i18n="auth_or">or</span>
                     <span class="flex-1 border-t border-slate-100"></span>
                 </div>
                 <button type="button" data-action="try-demo" class="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 py-3 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center space-x-2">
                     <i class="fa-solid fa-play text-blue-600 text-base"></i>
-                    <span>Try the demo</span>
+                    <span data-i18n="auth_try_demo">Try the demo</span>
                 </button>
-                <p class="text-[11px] text-slate-400 text-center">Explore a sample routine — no sign-in, nothing is saved.</p>
+                <p class="text-[11px] text-slate-400 text-center" data-i18n="auth_demo_note">Explore a sample routine — no sign-in, nothing is saved.</p>
                 <div class="pt-2 border-t border-slate-100 text-center">
                     <button type="button" data-action="shield-clicked" class="text-[11px] text-amber-700 hover:text-amber-800 font-bold">
-                        <i class="fa-solid fa-shield-halved mr-1"></i> Super Admin Sign-In
+                        <i class="fa-solid fa-shield-halved mr-1"></i> <span data-i18n="auth_super_admin_sign_in">Super Admin Sign-In</span>
                     </button>
                 </div>
             </div>
 
             <!-- First-Time Welcome / Profile Confirmation Screen -->
             <div id="welcomeProvisionView" class="space-y-4 hidden">
-                <h2 class="text-xl font-bold text-slate-900 text-center">Confirm Your Name</h2>
-                <p class="text-xs text-slate-500 text-center">Set your display name to initialize your personal routine checklist and streak tracker.</p>
+                <h2 class="text-xl font-bold text-slate-900 text-center" data-i18n="welcome_confirm_title">Confirm Your Name</h2>
+                <p class="text-xs text-slate-500 text-center" data-i18n="welcome_confirm_body">Set your display name to initialize your personal routine checklist and streak tracker.</p>
                 <form id="welcomeProvisionForm" class="space-y-3">
-                    <input type="text" id="welcomeDisplayNameInput" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Your Display Name">
+                    <input type="text" id="welcomeDisplayNameInput" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Your Display Name" data-i18n-attr="placeholder:welcome_name_placeholder">
                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold shadow">
-                        <i class="fa-solid fa-rocket mr-1"></i> Create Profile & Start Routine
+                        <i class="fa-solid fa-rocket mr-1"></i> <span data-i18n="welcome_create_button">Create Profile & Start Routine</span>
                     </button>
                 </form>
             </div>
@@ -158,35 +161,35 @@
             <div class="bg-blue-900 text-white p-4 rounded-2xl shadow-md flex justify-between items-center">
                 <div>
                     <div class="flex items-center space-x-2">
-                        <span class="bg-blue-800 text-blue-200 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase" id="familyNameBanner">Solo Mode</span>
+                        <span class="bg-blue-800 text-blue-200 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase" id="familyNameBanner" data-i18n="family_solo_mode">Solo Mode</span>
                         <span class="text-[11px] text-blue-200 font-semibold" id="currentCycleDateDisplay"></span>
                     </div>
-                    <h2 class="text-lg font-bold mt-1">Evening-to-Morning Cycle</h2>
-                    <p class="text-[11px] text-blue-200" id="cycleWindows">Early buffer: 60m before reminder</p>
+                    <h2 class="text-lg font-bold mt-1" data-i18n="cycle_title">Evening-to-Morning Cycle</h2>
+                    <p class="text-[11px] text-blue-200" id="cycleWindows" data-i18n="cycle_early_buffer_default">Early buffer: 60m before reminder</p>
                 </div>
                 <div class="text-right">
                     <span class="text-2xl font-black" id="streakCounter">🔥 0</span>
-                    <p class="text-[10px] text-blue-300">Active Streak</p>
+                    <p class="text-[10px] text-blue-300" data-i18n="streak_active">Active Streak</p>
                 </div>
             </div>
 
             <!-- Tasks Header & Controls -->
             <div class="flex justify-between items-center px-1">
                 <div class="flex items-center space-x-1.5">
-                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">My Routine</h3>
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500" data-i18n="tasks_header">My Routine</h3>
                     <select id="taskPhaseFilter" class="border rounded-lg px-2 py-1 text-[10px] bg-white text-slate-600 font-semibold">
-                        <option value="all">All Phases</option>
-                        <option value="evening">🌙 Evening (≥12:00)</option>
-                        <option value="morning">☀️ Morning (&lt;12:00)</option>
-                        <option value="pending">⏳ Pending Only</option>
+                        <option value="all" data-i18n="filter_all">All Phases</option>
+                        <option value="evening" data-i18n="filter_evening">🌙 Evening (≥12:00)</option>
+                        <option value="morning" data-i18n="filter_morning">☀️ Morning (&lt;12:00)</option>
+                        <option value="pending" data-i18n="filter_pending">⏳ Pending Only</option>
                     </select>
                 </div>
                 <div class="flex items-center space-x-1.5">
-                    <button data-action="reset-user-tasks" class="bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 shadow-sm text-[10px] px-2.5 py-1.5 rounded-xl font-semibold" title="Reset tasks to system defaults">
-                        <i class="fa-solid fa-rotate-right mr-1"></i> Reset Defaults
+                    <button data-action="reset-user-tasks" data-i18n-attr="title:reset_defaults_title" class="bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 shadow-sm text-[10px] px-2.5 py-1.5 rounded-xl font-semibold" title="Reset tasks to system defaults">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> <span data-i18n="reset_defaults">Reset Defaults</span>
                     </button>
                     <button data-action="open-add-task" id="addTaskBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-xl font-semibold shadow">
-                        <i class="fa-solid fa-plus mr-1"></i> Add Task
+                        <i class="fa-solid fa-plus mr-1"></i> <span data-i18n="add_task">Add Task</span>
                     </button>
                 </div>
             </div>
@@ -199,29 +202,29 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 text-center space-y-3">
                 <div class="flex justify-around items-center border-b pb-3">
                     <div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Current Streak</p>
+                        <p class="text-[10px] uppercase font-bold text-slate-400" data-i18n="streaks_current">Current Streak</p>
                         <p class="text-2xl font-black text-amber-600" id="streaksTabCurrent">🔥 0</p>
                     </div>
                     <div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Longest Streak</p>
+                        <p class="text-[10px] uppercase font-bold text-slate-400" data-i18n="streaks_longest">Longest Streak</p>
                         <p class="text-xl font-extrabold text-slate-800" id="streaksTabLongest">🏆 0</p>
                     </div>
                     <div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Total Cycles</p>
+                        <p class="text-[10px] uppercase font-bold text-slate-400" data-i18n="streaks_total">Total Cycles</p>
                         <p class="text-xl font-extrabold text-slate-800" id="streaksTabTotal">✅ 0</p>
                     </div>
                 </div>
-                <h2 class="text-sm font-bold text-slate-700 pt-1">Streak Milestone Matrix (Up to 15 Stars)</h2>
-                <p class="text-xs text-slate-500">Checking off all main tasks completes the daily cycle and lights up a star!</p>
+                <h2 class="text-sm font-bold text-slate-700 pt-1" data-i18n="streaks_matrix_title">Streak Milestone Matrix (Up to 15 Stars)</h2>
+                <p class="text-xs text-slate-500" data-i18n="streaks_matrix_body">Checking off all main tasks completes the daily cycle and lights up a star!</p>
                 <div id="starGridContainer" class="grid grid-cols-5 gap-2 justify-center py-2 max-w-xs mx-auto"></div>
                 <button data-action="test-celebration" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow">
-                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Test Celebration Animation
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> <span data-i18n="streaks_test_celebration">Test Celebration Animation</span>
                 </button>
             </div>
 
             <!-- Persistent Completion History -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
-                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Completed Cycle History</h3>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500"><i class="fa-solid fa-clock-rotate-left mr-1"></i> <span data-i18n="history_title">Completed Cycle History</span></h3>
                 <div id="completionHistoryList" class="space-y-2 text-xs"></div>
             </div>
         </div>
@@ -229,14 +232,14 @@
         <!-- Info Tab -->
         <div id="tabInfo" class="space-y-4 hidden">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3">
-                <h2 class="text-lg font-bold">Device Setup & Alerts</h2>
+                <h2 class="text-lg font-bold" data-i18n="info_title">Device Setup & Alerts</h2>
                 <p class="text-xs text-blue-800 font-semibold" id="detectedPlatformInfo"></p>
                 <div class="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg border" id="platformInstallInstructions"></div>
                 <button data-action="test-notification" class="w-full bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold shadow">
-                    <i class="fa-solid fa-bell mr-1"></i> Test Browser Notification
+                    <i class="fa-solid fa-bell mr-1"></i> <span data-i18n="info_test_notification">Test Browser Notification</span>
                 </button>
                 <button data-action="test-notification-delayed" class="w-full bg-amber-700 text-white py-2.5 rounded-xl text-xs font-bold shadow">
-                    <i class="fa-solid fa-hourglass-half mr-1"></i> Test Notification in 30s (then switch apps)
+                    <i class="fa-solid fa-hourglass-half mr-1"></i> <span data-i18n="info_test_notification_delayed">Test Notification in 30s (then switch apps)</span>
                 </button>
                 <p class="text-xs text-amber-800 font-semibold hidden" id="notificationTestStatus"></p>
             </div>
@@ -244,7 +247,7 @@
     </main>
 
     <footer class="max-w-md mx-auto px-4 pb-8 text-center">
-        <p class="text-xs text-slate-500">© 2026 Andrew Horowitz · Routines Clarity <span id="appVersion">V1</span> · Built with Muse · <a href="https://andrewdhorowitz.com/privacy" class="underline inline-block py-1">Privacy</a></p>
+        <p class="text-xs text-slate-500"><span data-i18n="footer_line_start">© 2026 Andrew Horowitz · Routines Clarity</span> <span id="appVersion">V1</span> <span data-i18n="footer_line_end">· Built with Muse ·</span> <a href="https://andrewdhorowitz.com/privacy" data-i18n="footer_privacy" class="underline inline-block py-1">Privacy</a></p>
     </footer>
     <script>
         const APP_VERSION = "V1";
@@ -255,39 +258,39 @@
     <div id="celebrationModal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center space-y-4 animate-bounce">
             <div class="text-5xl">🎉🔥🌟</div>
-            <h2 class="text-xl font-black text-slate-900">Cycle Complete!</h2>
-            <p class="text-xs text-slate-600">Every main routine task is checked off! Your streak is locked in for this cycle!</p>
-            <button data-action="close-modals" class="w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow">Awesome!</button>
+            <h2 class="text-xl font-black text-slate-900" data-i18n="celebration_title">Cycle Complete!</h2>
+            <p class="text-xs text-slate-600" data-i18n="celebration_body">Every main routine task is checked off! Your streak is locked in for this cycle!</p>
+            <button data-action="close-modals" data-i18n="celebration_button" class="w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow">Awesome!</button>
         </div>
     </div>
 
     <!-- Super Admin Login Modal (When clicking Shield while not signed in as Super Admin) -->
     <div id="adminLoginModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4">
-            <h2 class="text-lg font-bold"><i class="fa-solid fa-shield-halved text-amber-600 mr-1.5"></i>Super Admin Portal</h2>
-            <p class="text-xs text-slate-500">Sign in with the Super Admin Google account to access the Global User Directory, edit default starter tasks, or impersonate users.</p>
+            <h2 class="text-lg font-bold"><i class="fa-solid fa-shield-halved text-amber-600 mr-1.5"></i><span data-i18n="admin_login_title">Super Admin Portal</span></h2>
+            <p class="text-xs text-slate-500" data-i18n="admin_login_body">Sign in with the Super Admin Google account to access the Global User Directory, edit default starter tasks, or impersonate users.</p>
             <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
-                <i class="fa-brands fa-google text-red-400 text-base"></i><span>Sign in with Google</span>
+                <i class="fa-brands fa-google text-red-400 text-base"></i><span data-i18n="admin_login_google">Sign in with Google</span>
             </button>
-            <button type="button" data-action="close-modals" class="w-full bg-white hover:bg-slate-50 border border-slate-300 py-2 rounded-xl text-xs font-semibold text-slate-800 shadow-sm">Cancel</button>
+            <button type="button" data-action="close-modals" data-i18n="shared_cancel" class="w-full bg-white hover:bg-slate-50 border border-slate-300 py-2 rounded-xl text-xs font-semibold text-slate-800 shadow-sm">Cancel</button>
         </div>
     </div>
 
     <!-- Add / Edit Task Modal -->
     <div id="taskModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4">
-            <h2 class="text-lg font-bold" id="taskModalTitle">Add Routine Task</h2>
+            <h2 class="text-lg font-bold" id="taskModalTitle" data-i18n="task_modal_add_title">Add Routine Task</h2>
             <form id="taskForm" class="space-y-3">
                 <input type="hidden" id="editTaskIdInput" value="">
-                <input type="text" id="newTaskTitle" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Main Task Title">
+                <input type="text" id="newTaskTitle" required class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Main Task Title" data-i18n-attr="placeholder:task_title_placeholder">
                 <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-[10px] text-slate-500">Reminder</label><input type="time" id="newTaskReminder" value="20:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
-                    <div><label class="text-[10px] text-slate-500">Deadline</label><input type="time" id="newTaskDeadline" value="21:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
+                    <div><label class="text-[10px] text-slate-500" data-i18n="task_reminder_label">Reminder</label><input type="time" id="newTaskReminder" value="20:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
+                    <div><label class="text-[10px] text-slate-500" data-i18n="task_deadline_label">Deadline</label><input type="time" id="newTaskDeadline" value="21:30" required class="w-full border rounded-xl px-2 py-1.5 text-sm"></div>
                 </div>
-                <input type="text" id="newSubtasks" class="w-full border rounded-xl px-3 py-2 text-xs" placeholder="Sub-dependent tasks (comma separated)">
+                <input type="text" id="newSubtasks" class="w-full border rounded-xl px-3 py-2 text-xs" placeholder="Sub-dependent tasks (comma separated)" data-i18n-attr="placeholder:task_subtasks_placeholder">
                 <div class="flex space-x-2 pt-1">
-                    <button type="button" data-action="close-modals" class="flex-1 bg-white hover:bg-slate-50 border border-slate-300 py-2 rounded-xl text-xs font-semibold text-slate-800 shadow-sm">Cancel</button>
-                    <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-xl text-xs font-semibold">Save Task</button>
+                    <button type="button" data-action="close-modals" data-i18n="shared_cancel" class="flex-1 bg-white hover:bg-slate-50 border border-slate-300 py-2 rounded-xl text-xs font-semibold text-slate-800 shadow-sm">Cancel</button>
+                    <button type="submit" data-i18n="task_save" class="flex-1 bg-blue-600 text-white py-2 rounded-xl text-xs font-semibold">Save Task</button>
                 </div>
             </form>
         </div>
@@ -297,9 +300,9 @@
     <div id="superAdminGlobalModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white w-full max-w-lg rounded-2xl p-5 shadow-xl space-y-4 max-h-[88vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b pb-2">
-                <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-server text-amber-600 mr-1"></i> Super Admin Global Portal</h2>
+                <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-server text-amber-600 mr-1"></i> <span data-i18n="admin_portal_title">Super Admin Global Portal</span></h2>
                 <div class="flex items-center space-x-2">
-                    <span id="backendHealthBadge" class="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">Checking...</span>
+                    <span id="backendHealthBadge" data-i18n="admin_checking" class="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">Checking...</span>
                     <button data-action="close-modals" class="text-slate-700 hover:text-slate-900 font-bold">✕</button>
                 </div>
             </div>
@@ -308,49 +311,49 @@
                 <!-- 1. Global System Default Tasks & Settings Template -->
                 <div class="bg-slate-50 border p-3 rounded-xl space-y-2">
                     <div class="flex justify-between items-center">
-                        <span class="font-bold text-slate-700 uppercase">1. System Default Tasks & Buffer</span>
+                        <span class="font-bold text-slate-700 uppercase" data-i18n="admin_defaults_title">1. System Default Tasks & Buffer</span>
                         <div class="flex items-center space-x-1">
-                            <label class="text-[10px] text-slate-500 font-bold">Early Buffer (mins):</label>
+                            <label class="text-[10px] text-slate-500 font-bold" data-i18n="admin_buffer_label">Early Buffer (mins):</label>
                             <input type="number" id="globalEarlyBufferInput" value="60" min="0" max="1440" class="w-16 border rounded px-1.5 py-0.5 text-xs bg-white">
                         </div>
                     </div>
                     <textarea id="globalDefaultTasksInput" class="w-full h-28 border rounded-lg p-2 font-mono text-[10px] bg-white"></textarea>
                     <div class="flex justify-end">
-                        <button data-action="save-global-config" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold text-[10px]">Save System Defaults</button>
+                        <button data-action="save-global-config" data-i18n="admin_save_defaults" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold text-[10px]">Save System Defaults</button>
                     </div>
                 </div>
 
                 <!-- 2. Registered Users Directory (families/default/members) -->
                 <div>
-                    <h3 class="font-bold text-slate-700 uppercase mb-1">2. Registered Users Directory (Solo Mode)</h3>
-                    <div id="globalFamiliesList" class="bg-slate-50 border rounded-xl p-3 space-y-2 max-h-52 overflow-y-auto">Loading...</div>
+                    <h3 class="font-bold text-slate-700 uppercase mb-1" data-i18n="admin_directory_title">2. Registered Users Directory (Solo Mode)</h3>
+                    <div id="globalFamiliesList" data-i18n="admin_loading" class="bg-slate-50 border rounded-xl p-3 space-y-2 max-h-52 overflow-y-auto">Loading...</div>
                 </div>
 
                 <!-- 3. Audit Logs -->
                 <div>
-                    <h3 class="font-bold text-slate-700 uppercase mb-1">3. Global Audit Logs</h3>
-                    <div id="globalAuditLogsList" class="bg-slate-900 text-emerald-400 font-mono rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto text-[10px]">Loading...</div>
+                    <h3 class="font-bold text-slate-700 uppercase mb-1" data-i18n="admin_logs_title">3. Global Audit Logs</h3>
+                    <div id="globalAuditLogsList" data-i18n="admin_loading" class="bg-slate-900 text-emerald-400 font-mono rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto text-[10px]">Loading...</div>
                 </div>
 
                 <!-- 4. Danger Zone -->
                 <div class="bg-red-50 border border-red-200 p-3 rounded-xl space-y-2">
-                    <span class="font-bold text-red-900 uppercase">4. Danger Zone</span>
+                    <span class="font-bold text-red-900 uppercase" data-i18n="admin_danger_title">4. Danger Zone</span>
                     <button data-action="nuke-all-dbs" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold shadow">
-                        <i class="fa-solid fa-skull-crossbones mr-1"></i> Nuke / Reset ALL DBs
+                        <i class="fa-solid fa-skull-crossbones mr-1"></i> <span data-i18n="admin_nuke">Nuke / Reset ALL DBs</span>
                     </button>
                 </div>
             </div>
-            <button type="button" data-action="close-modals" class="w-full bg-slate-900 py-2.5 rounded-xl text-xs text-white font-semibold">Close Global Portal & View Routine</button>
+            <button type="button" data-action="close-modals" data-i18n="admin_close_portal" class="w-full bg-slate-900 py-2.5 rounded-xl text-xs text-white font-semibold">Close Global Portal & View Routine</button>
         </div>
     </div>
 
     <!-- Debug Console -->
     <div id="debugConsole" style="display:none" class="fixed bottom-0 left-0 right-0 bg-slate-900 text-emerald-400 font-mono text-[11px] p-3 max-h-40 overflow-y-auto border-t-2 border-emerald-500 z-50">
         <div class="flex justify-between items-center border-b border-slate-800 pb-1 mb-1">
-            <span class="font-bold text-white"><i class="fa-solid fa-terminal mr-1"></i> Debug Console & Trace</span>
+            <span class="font-bold text-white"><i class="fa-solid fa-terminal mr-1"></i> <span data-i18n="debug_title">Debug Console & Trace</span></span>
             <div class="space-x-1.5">
-                <button data-action="copy-debug-logs" class="bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5 rounded text-[10px] text-white font-bold">Copy Logs</button>
-                <button data-action="clear-debug-logs" class="bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-300">Clear</button>
+                <button data-action="copy-debug-logs" data-i18n="debug_copy" class="bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5 rounded text-[10px] text-white font-bold">Copy Logs</button>
+                <button data-action="clear-debug-logs" data-i18n="debug_clear" class="bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-300">Clear</button>
                 <button data-action="hide-debug-console" class="bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-400">X</button>
             </div>
         </div>
@@ -1173,7 +1176,7 @@
         // banner (keys reset on page load).
         function friendlyError(e, fallback) {
             if (e && (e.code === 'permission-denied' || /insufficient permissions/i.test(e.message || ''))) {
-                return 'Access denied by the security rules. If this should work, sign out and back in; if it keeps happening, tell the app owner.';
+                return L('msg_access_denied');
             }
             return fallback;
         }
@@ -1186,7 +1189,7 @@
 
         function copyDebugLogs() {
             // S34: a failed copy is at least counted (NotAllowedError -> Tier 0).
-            navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert("Full debug trace copied to clipboard!")).catch(e => reportError(e, { area: 'render', operation: 'copy-debug-logs' }));
+            navigator.clipboard.writeText(document.getElementById('debugLogs').innerText).then(() => alert(L('debug_copied_alert'))).catch(e => reportError(e, { area: 'render', operation: 'copy-debug-logs' }));
         }
         // ============================================================================
         // ERROR REPORTING (Phase 1) — the fleet error-reporter funnel (vendored
@@ -1261,6 +1264,9 @@
         }
 
         const firebaseConfig = { apiKey: "__FIREBASE_API_KEY__", authDomain: "family-routines-app.firebaseapp.com", projectId: "family-routines-app" };
+        // version.js reads this for its Remote Config FALLBACK leg — this app's Firebase
+        // home IS family-routines-app (the fleet mirror project), so the fallback is real.
+        window.RS_FIREBASE = firebaseConfig;
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
@@ -1347,7 +1353,7 @@
             };
 
             session.uid = targetUid;
-            session.userName = targetName || 'User';
+            session.userName = targetName || L('default_display_name');
             session.email = targetEmail || '';
             session.role = 'user';
             session.isImpersonating = true;
@@ -1384,7 +1390,7 @@
             const provider = new firebase.auth.GoogleAuthProvider();
             provider.setCustomParameters({ prompt: 'select_account' });
             logDebug('Starting Google Sign-In popup...');
-            showUserError('Signing in...');
+            showUserError(L('msg_signing_in'));
             // #23 watchdog: a popup promise that neither resolves nor rejects used
             // to leave the tap dead forever — no error, no fallback. If it has not
             // settled within 10s, take the full-page redirect path exactly once;
@@ -1403,7 +1409,7 @@
                     // this attempt (Tier 2).
                     reportError(re, { area: 'auth', operation: 'sign-in-redirect-fallback', recovered: false, sessionDead: true });
                     logDebug(`Redirect fallback failed (${re.code || 'unknown'}): ${re.message}`, true);
-                    showUserError(`Sign-in failed (${re.code || 'unknown error'}): ${re.message} Please try again.`);
+                    showUserError(L('msg_signin_failed', {code: re.code || 'unknown error', message: re.message}));
                 }
             };
             const watchdog = setTimeout(() => {
@@ -1411,7 +1417,7 @@
                 logDebug('Popup watchdog: no settle within 10s. Treating as hung.', true);
                 // S5: the watchdog's finding used to live only in that log line.
                 reportError({ code: 'watchdog-fired' }, { area: 'auth', operation: 'sign-in-watchdog', recovered: 'pending', watchdogFired: true });
-                startRedirectFallback("Popup sign-in isn't responding. Trying the full-page sign-in instead...");
+                startRedirectFallback(L('msg_popup_unresponsive'));
             }, 10000);
             try {
                 const res = await auth.signInWithPopup(provider);
@@ -1439,13 +1445,13 @@
                 if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
                     // #23: the user backed out of the popup themselves — say so gently
                     // on screen, and do NOT bounce them into a full-page redirect.
-                    showUserError('Sign-in cancelled — tap to try again.');
+                    showUserError(L('msg_signin_cancelled'));
                     return;
                 }
                 // #23: every other popup failure used to die in this debug log (or in
                 // an alert some webviews never show). Now it is surfaced on screen AND
                 // falls back to the full-page redirect sign-in.
-                await startRedirectFallback(`Popup sign-in didn't work (${e.code || e.message}). Trying the full-page sign-in instead...`);
+                await startRedirectFallback(L('msg_popup_failed', {detail: e.code || e.message}));
             }
         }
 
@@ -1473,7 +1479,7 @@
             reportError(e, { area: 'auth', operation: 'sign-in-redirect-result', recovered: false, canContinue: false });
             try { sessionStorage.removeItem('pending_signin_attempt'); } catch (ignored) {}
             logDebug(`Redirect Auth Error (${e.code || 'unknown'}): ${e.message}`, true);
-            showUserError(`Sign-in did not finish (${e.code || 'unknown error'}): ${e.message} Please try signing in again.`);
+            showUserError(L('msg_signin_unfinished', {code: e.code || 'unknown error', message: e.message}));
         });
 
         // S8: the auth-state callback is a shell. An escaping throw used to
@@ -1490,7 +1496,7 @@
                 await handleAuthStateChanged(user);
             } catch (e) {
                 reportError(e, { area: 'auth', operation: 'auth-state-callback', recovered: false, sessionDead: true, phase: authPhase });
-                showUserError('We could not load your profile. Please check your connection and refresh the page.');
+                showUserError(L('msg_profile_load_failed'));
             }
         });
 
@@ -1593,10 +1599,10 @@
                     document.getElementById('googleSignInView').classList.add('hidden');
                     document.getElementById('welcomeProvisionView').classList.remove('hidden');
                     document.getElementById('welcomeDisplayNameInput').value = user.displayName || (user.email ? user.email.split('@')[0] : '');
-                    document.getElementById('userRoleBadge').innerText = 'Confirm Profile';
+                    document.getElementById('userRoleBadge').innerText = L('role_confirm_profile');
                 } else {
                     const data = memDoc.data();
-                    session.userName = data.name || user.displayName || 'User';
+                    session.userName = data.name || user.displayName || L('default_display_name');
                     session.role = 'user';
                     try {
                         await memRef.set({ lastActive: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
@@ -1609,7 +1615,7 @@
                 }
             } catch (e) {
                 logDebug(`Profile lookup error: ${e.message}`, true);
-                showUserError('We could not load your profile. Please check your connection and refresh the page.');
+                showUserError(L('msg_profile_load_failed'));
             }
         }
 
@@ -1705,7 +1711,7 @@
                 // batch itself; this call names the Welcome surface).
                 reportError(err, { area: 'auth', operation: 'welcome-provision', recovered: false, canContinue: false });
                 logDebug(`Provisioning failed: ${err.message}`, true);
-                showUserError(friendlyError(err, 'We could not finish setting up your profile. Please check your connection and try again.'));
+                showUserError(friendlyError(err, L('msg_provision_failed')));
             }
         }
 
@@ -1719,13 +1725,13 @@
                     }
                 }
                 const cw = document.getElementById('cycleWindows');
-                if (cw) cw.innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
+                if (cw) cw.innerText = L('cycle_early_buffer', {buffer: session.earlyBuffer});
             }, err => {
                 // S15: report the RAW error first; the existing banner path
                 // then runs unchanged. Reports are not once-gated.
                 reportError(err, { area: 'render', operation: 'subscribe-config', earlyBufferInEffect: session.earlyBuffer });
                 logDebug(`Config listener warning: ${err.message}`, true);
-                showUserErrorOnce('config', friendlyError(err, 'Live settings updates are not coming through. Refresh the page.'));
+                showUserErrorOnce('config', friendlyError(err, L('msg_config_sync_failed')));
             });
         }
 
@@ -1827,7 +1833,7 @@
                 document.getElementById('navTabs').classList.add('hidden');
                 superAdminContainer.classList.add('hidden');
                 document.getElementById('userNameDisplay').innerText = 'Routines Clarity';
-                document.getElementById('userRoleBadge').innerText = 'Not Signed In';
+                document.getElementById('userRoleBadge').innerText = L('role_not_signed_in');
                 return;
             }
 
@@ -1843,11 +1849,11 @@
                 superAdminContainer.innerHTML = `
                     <div class="bg-amber-900 text-white p-4 rounded-2xl shadow-md flex justify-between items-center">
                         <div>
-                            <p class="text-[10px] uppercase font-bold text-amber-300">👑 Super Admin Mode</p>
-                            <h2 class="text-sm font-bold">Global User Directory & System Config</h2>
+                            <p class="text-[10px] uppercase font-bold text-amber-300">${L('admin_bar_mode')}</p>
+                            <h2 class="text-sm font-bold">${L('admin_bar_title')}</h2>
                         </div>
                         <button data-action="open-admin-portal" class="bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black px-3 py-2 rounded-xl shadow">
-                            Open Global Portal
+                            ${L('admin_open_portal')}
                         </button>
                     </div>`;
             } else {
@@ -1857,10 +1863,10 @@
 
             document.getElementById('userNameDisplay').innerText = session.userName;
             document.getElementById('userRoleBadge').innerText = session.isImpersonating
-                ? `IMPERSONATING: ${session.userName}`
-                : (isPureAdmin ? 'SUPER ADMIN + SOLO ROUTINE' : (demoMode ? 'DEMO MODE' : 'SOLO MODE'));
-            document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
-            document.getElementById('cycleWindows').innerText = `Early buffer: ${session.earlyBuffer}m before reminder`;
+                ? L('role_impersonating', {name: session.userName})
+                : (isPureAdmin ? L('role_super_admin_solo') : (demoMode ? L('role_demo_mode') : L('role_solo_mode')));
+            document.getElementById('currentCycleDateDisplay').innerText = L('cycle_label', {cycle: cycleIdFor()});
+            document.getElementById('cycleWindows').innerText = L('cycle_early_buffer', {buffer: session.earlyBuffer});
 
             // S33: report-and-continue. A storage-blocked browser must
             // never gate render on a convenience cache (this throw used to
@@ -1938,7 +1944,7 @@
                             lastRolloverReportKey = rolloverKey;
                             reportError(e, { area: 'tasks', operation: 'cycle-rollover-reset', writeAmbiguous: true, fromCycle: fromCycle, toCycle: currentCycle, taskCount: userTasks.length });
                         }
-                        showUserErrorOnce('rollover', friendlyError(e, 'Your new day could not be started on the server. Your list may show yesterday’s state until this clears.'));
+                        showUserErrorOnce('rollover', friendlyError(e, L('msg_rollover_failed')));
                     }
                 }
 
@@ -1955,7 +1961,7 @@
                     reportError(err, { area: 'tasks', operation: 'subscribe-tasks', recovered: false, firstSnapshotReceived: true });
                 }
                 logDebug(`Tasks listener error: ${err.message}`, true);
-                showUserErrorOnce('tasks', friendlyError(err, 'Your tasks stopped syncing. Refresh the page.'));
+                showUserErrorOnce('tasks', friendlyError(err, L('msg_tasks_sync_failed')));
             });
 
             // 2. UID-scoped streak listener + FIX 3 Lazy Reconcile on load
@@ -2010,7 +2016,7 @@
                 // S18: raw code first (Tier 1), existing banner unchanged.
                 reportError(err, { area: 'streak', operation: 'subscribe-streak', recovered: false, firstSnapshotReceived: streakSnapshotSeen });
                 logDebug(`Streak listener error: ${err.message}`, true);
-                showUserErrorOnce('streak', friendlyError(err, 'Your streak stopped syncing. Refresh the page.'));
+                showUserErrorOnce('streak', friendlyError(err, L('msg_streak_sync_failed')));
             });
 
             // 3. P6: UID-scoped completion history listener
@@ -2025,7 +2031,7 @@
                 // S20: raw code first (Tier 1), existing banner unchanged.
                 reportError(err, { area: 'history', operation: 'subscribe-history', recovered: false, firstSnapshotReceived: historySnapshotSeen });
                 logDebug(`History listener error: ${err.message}`, true);
-                showUserErrorOnce('history', friendlyError(err, 'Your history stopped syncing. Refresh the page.'));
+                showUserErrorOnce('history', friendlyError(err, L('msg_history_sync_failed')));
             });
         }
 
@@ -2054,7 +2060,7 @@
             const listEl = document.getElementById('completionHistoryList');
             if (!listEl) return;
             if (completionHistory.length === 0) {
-                listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-3">No completed cycles recorded yet. Complete all main tasks to log your first cycle!</p>`;
+                listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-3">${L('history_empty')}</p>`;
                 return;
             }
             listEl.innerHTML = completionHistory.map(item => {
@@ -2063,10 +2069,10 @@
                 return `
                     <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1.5">
                         <div class="flex justify-between items-center">
-                            <span class="font-bold text-slate-800">📅 Cycle ${esc(item.cycleId)}</span>
-                            <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">${esc(item.taskCount || titles.length)} tasks completed</span>
+                            <span class="font-bold text-slate-800">${L('cycle_label', {cycle: esc(item.cycleId)})}</span>
+                            <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">${L('history_tasks_completed', {count: esc(item.taskCount || titles.length)})}</span>
                         </div>
-                        <div class="pt-0.5">${pillsHtml || '<span class="text-[10px] text-slate-400">Completed</span>'}</div>
+                        <div class="pt-0.5">${pillsHtml || `<span class="text-[10px] text-slate-400">${L('history_completed')}</span>`}</div>
                     </div>`;
             }).join('');
         }
@@ -2077,7 +2083,7 @@
         function renderTasks() {
             const l = document.getElementById('taskList');
             if (!l) return;
-            document.getElementById('currentCycleDateDisplay').innerText = `📅 Cycle ${cycleIdFor()}`;
+            document.getElementById('currentCycleDateDisplay').innerText = L('cycle_label', {cycle: cycleIdFor()});
 
             const phaseFilter = document.getElementById('taskPhaseFilter') ? document.getElementById('taskPhaseFilter').value : 'all';
             const filtered = tasks.filter(t => {
@@ -2089,15 +2095,15 @@
             });
 
             if (filtered.length === 0) {
-                l.innerHTML = `<div class="bg-white p-6 rounded-2xl border border-slate-100 text-center text-xs text-slate-400">No tasks match the current view. Click "Reset Defaults" or "Add Task" above!</div>`;
+                l.innerHTML = `<div class="bg-white p-6 rounded-2xl border border-slate-100 text-center text-xs text-slate-400">${L('tasks_empty')}</div>`;
                 return;
             }
 
             l.innerHTML = filtered.map((t, idx) => {
                 const h = parseInt((t.reminder || '20:00').split(':')[0], 10);
                 const phaseBadge = h >= 12
-                    ? `<span class="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">🌙 Evening</span>`
-                    : `<span class="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">☀️ Morning</span>`;
+                    ? `<span class="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">${L('phase_evening')}</span>`
+                    : `<span class="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">${L('phase_morning')}</span>`;
 
                 const subsHtml = (t.subtasks || []).map((s, sIdx) => `
                     <div class="flex items-center justify-between pl-7 pt-1 text-[11px] text-slate-600">
@@ -2105,7 +2111,7 @@
                             <input type="checkbox" ${s.done ? 'checked' : ''} data-action="toggle-subtask" data-task-id="${esc(t.id)}" data-sub-idx="${sIdx}" class="rounded text-blue-600">
                             <span class="${s.done ? 'line-through text-slate-400' : ''}">${esc(s.title)}</span>
                         </label>
-                        <button data-action="delete-subtask" data-task-id="${esc(t.id)}" data-sub-idx="${sIdx}" class="text-red-400 hover:text-red-600 px-1" title="Remove subtask">✕</button>
+                        <button data-action="delete-subtask" data-task-id="${esc(t.id)}" data-sub-idx="${sIdx}" class="text-red-400 hover:text-red-600 px-1" title="${L('task_remove_subtask_title')}">✕</button>
                     </div>`).join('');
 
                 return `
@@ -2120,16 +2126,16 @@
                                     <div class="text-[10px] text-slate-400 flex items-center space-x-1.5 mt-0.5">
                                         ${phaseBadge}
                                         <span>📅 ${esc(t.cycleId || cycleIdFor())}</span>
-                                        <span>⏰ ${esc(t.reminder)} (Due ${esc(t.deadline)})</span>
+                                        <span>${L('task_time_meta', {reminder: esc(t.reminder), deadline: esc(t.deadline)})}</span>
                                     </div>
                                 </div>
                             </div>
                             <div class="flex items-center space-x-1">
-                                <button data-action="move-task-up" data-task-id="${esc(t.id)}" class="text-blue-600 hover:text-blue-800 px-1 text-xs" title="Move Up" ${idx === 0 ? 'disabled' : ''}>↑</button>
-                                <button data-action="move-task-down" data-task-id="${esc(t.id)}" class="text-blue-600 hover:text-blue-800 px-1 text-xs" title="Move Down" ${idx === filtered.length - 1 ? 'disabled' : ''}>↓</button>
-                                <button data-action="add-subtask" data-task-id="${esc(t.id)}" class="text-[10px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 shadow-sm px-2 py-0.5 rounded font-bold" title="Add Subtask">+ Sub</button>
-                                <button data-action="edit-task" data-task-id="${esc(t.id)}" class="text-blue-500 hover:text-blue-700 px-1" title="Edit Task"><i class="fa-solid fa-pen text-[11px]"></i></button>
-                                <button data-action="delete-task" data-task-id="${esc(t.id)}" class="text-red-400 hover:text-red-600 px-1" title="Delete Task"><i class="fa-solid fa-trash text-[11px]"></i></button>
+                                <button data-action="move-task-up" data-task-id="${esc(t.id)}" class="text-blue-600 hover:text-blue-800 px-1 text-xs" title="${L('task_move_up_title')}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                                <button data-action="move-task-down" data-task-id="${esc(t.id)}" class="text-blue-600 hover:text-blue-800 px-1 text-xs" title="${L('task_move_down_title')}" ${idx === filtered.length - 1 ? 'disabled' : ''}>↓</button>
+                                <button data-action="add-subtask" data-task-id="${esc(t.id)}" class="text-[10px] bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 shadow-sm px-2 py-0.5 rounded font-bold" title="${L('task_add_subtask_title')}">${L('task_add_subtask')}</button>
+                                <button data-action="edit-task" data-task-id="${esc(t.id)}" class="text-blue-500 hover:text-blue-700 px-1" title="${L('task_edit_title')}"><i class="fa-solid fa-pen text-[11px]"></i></button>
+                                <button data-action="delete-task" data-task-id="${esc(t.id)}" class="text-red-400 hover:text-red-600 px-1" title="${L('task_delete_title')}"><i class="fa-solid fa-trash text-[11px]"></i></button>
                             </div>
                         </div>
                         ${subsHtml}
@@ -2154,7 +2160,7 @@
                 if (now < openDT) {
                     const openTimeFormatted = openDT.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
                     const openDateFormatted = localDateStr(openDT);
-                    alert(`Too early! "${t.title}" opens at ${openTimeFormatted} on ${openDateFormatted} (${session.earlyBuffer}m before the ${t.reminder} reminder).`);
+                    alert(L('alert_too_early', {title: t.title, time: openTimeFormatted, date: openDateFormatted, buffer: session.earlyBuffer, reminder: t.reminder}));
                     renderTasks();
                     return;
                 }
@@ -2182,7 +2188,7 @@
                 });
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'toggle-task', writeAmbiguous: true });
-                showUserErrorOnce('toggle-task', friendlyError(e, 'That check-off could not be saved. Check your connection and try again.'));
+                showUserErrorOnce('toggle-task', friendlyError(e, L('msg_toggle_failed')));
                 return;
             }
             logUsage('Task Toggled', `${t.title} -> ${newDone}`);
@@ -2265,7 +2271,7 @@
                 // success and reports nothing (the idempotency rule).
                 reportError(e, { area: 'streak', operation: 'streak-credit-transaction', writeAmbiguous: !!(e && (e.code === 'unavailable' || e.code === 'deadline-exceeded')), cycleId: currentCycle });
                 logDebug(`Streak transaction error: ${e.message}`, true);
-                showUserErrorOnce('streakTx', friendlyError(e, 'Your completion could not be recorded just now. Reload the app to retry.'));
+                showUserErrorOnce('streakTx', friendlyError(e, L('msg_completion_failed')));
             }
             return creditedNow;
         }
@@ -2274,7 +2280,7 @@
         // P5 — TASK CRUD, REORDER, SUBTASKS & RESET TO DEFAULTS
         // ============================================================================
         function openAddTaskModal() {
-            document.getElementById('taskModalTitle').innerText = 'Add Routine Task';
+            document.getElementById('taskModalTitle').innerText = L('task_modal_add_title');
             document.getElementById('editTaskIdInput').value = '';
             document.getElementById('newTaskTitle').value = '';
             document.getElementById('newTaskReminder').value = '20:30';
@@ -2286,7 +2292,7 @@
         function openEditTaskModal(taskId) {
             const t = tasks.find(x => x.id === taskId);
             if (!t) return;
-            document.getElementById('taskModalTitle').innerText = 'Edit Routine Task';
+            document.getElementById('taskModalTitle').innerText = L('task_modal_edit_title');
             document.getElementById('editTaskIdInput').value = t.id;
             document.getElementById('newTaskTitle').value = t.title || '';
             document.getElementById('newTaskReminder').value = t.reminder || '20:30';
@@ -2345,7 +2351,7 @@
                 }
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: editId ? 'save-task-edit' : 'save-task-add', writeAmbiguous: true });
-                showUserErrorOnce('save-task', friendlyError(e, 'Your task could not be saved. It is still here in the form — check your connection and try again.'));
+                showUserErrorOnce('save-task', friendlyError(e, L('msg_save_task_failed')));
                 return;
             }
             closeModals();
@@ -2354,7 +2360,7 @@
         async function deleteTask(taskId) {
             const t = tasks.find(x => x.id === taskId);
             if (!t) return;
-            if (!confirm(`Delete task "${t.title}"?`)) return;
+            if (!confirm(L('confirm_delete_task', {title: t.title}))) return;
             if (demoMode) { tasks = tasks.filter(x => x.id !== taskId); renderTasks(); return; }
             // S23 (the confirm() decline above stays drop-class — it returns
             // before this point and is never reported).
@@ -2362,7 +2368,7 @@
                 await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).delete();
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'delete-task', writeAmbiguous: true });
-                showUserErrorOnce('delete-task', friendlyError(e, 'That task could not be deleted. Check your connection and try again.'));
+                showUserErrorOnce('delete-task', friendlyError(e, L('msg_delete_task_failed')));
                 return;
             }
             logUsage('Task Deleted', t.title);
@@ -2401,7 +2407,7 @@
                 await batch.commit();
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'reorder-tasks', writeAmbiguous: true });
-                showUserErrorOnce('reorder-tasks', friendlyError(e, 'The new order could not be saved — it may revert in a moment.'));
+                showUserErrorOnce('reorder-tasks', friendlyError(e, L('msg_reorder_failed')));
             }
         }
 
@@ -2416,7 +2422,7 @@
                 await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'toggle-subtask', writeAmbiguous: true });
-                showUserErrorOnce('toggle-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+                showUserErrorOnce('toggle-subtask', friendlyError(e, L('msg_subtask_failed')));
             }
         }
 
@@ -2430,12 +2436,12 @@
                 await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: t.subtasks });
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'delete-subtask', writeAmbiguous: true });
-                showUserErrorOnce('delete-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+                showUserErrorOnce('delete-subtask', friendlyError(e, L('msg_subtask_failed')));
             }
         }
 
         async function promptAddSubtask(taskId) {
-            const subTitle = prompt("Add sub-dependent task (breakdown item):");
+            const subTitle = prompt(L('prompt_add_subtask'));
             if (!subTitle || !subTitle.trim()) return;
             const t = tasks.find(x => x.id === taskId);
             if (!t) return;
@@ -2447,14 +2453,14 @@
                 await db.collection('families').doc(DEFAULT_FAMILY_ID).collection('tasks').doc(taskId).update({ subtasks: updated });
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'add-subtask', writeAmbiguous: true });
-                showUserErrorOnce('add-subtask', friendlyError(e, 'That subtask change could not be saved. Check your connection and try again.'));
+                showUserErrorOnce('add-subtask', friendlyError(e, L('msg_subtask_failed')));
             }
         }
 
         // P5 & FIX 3: Reset user's tasks to system defaults for current cycle AND delete current cycle's completion doc so it can be re-earned
         async function resetUserTasksToDefaults() {
             if (!session.uid) return;
-            if (!confirm("Reset your tasks to the system default template for the current cycle? This replaces your custom edits and clears today's completion proof so you can re-earn it.")) return;
+            if (!confirm(L('confirm_reset_tasks'))) return;
 
             if (demoMode) {
                 tasks = freshDemoTasks();
@@ -2541,7 +2547,7 @@
                 logUsage('Reset Tasks to Defaults', `UID: ${uid}, Cycle: ${currentCycle}`);
             } catch (e) {
                 logDebug(`Reset tasks error: ${e.message}`, true);
-                showUserError(friendlyError(e, 'Resetting your tasks did not work. Nothing was changed — check your connection and try again.'));
+                showUserError(friendlyError(e, L('msg_reset_failed')));
             }
         }
 
@@ -2550,11 +2556,11 @@
         // ============================================================================
         function handleShieldClick() {
             if (isBlockedByImpersonationGuard('handleShieldClick')) return;
-            if (demoMode) { showUserError('The Super Admin portal is not part of the demo — sign in to explore the full app.'); return; }
+            if (demoMode) { showUserError(L('msg_admin_demo_blocked')); return; }
             if (session.role === 'admin') {
                 openSuperAdminGlobalModal();
             } else if (session.uid) {
-                showUserError(`You're signed in as ${session.userName || 'this account'}, but this account isn't a Super Admin.`);
+                showUserError(L('msg_not_admin', {name: session.userName || L('this_account')}));
             } else {
                 openModal('adminLoginModal');
             }
@@ -2562,7 +2568,7 @@
 
         async function openSuperAdminGlobalModal() {
             if (isBlockedByImpersonationGuard('openSuperAdminGlobalModal')) return;
-            if (session.role !== 'admin') { showUserError('The Global Portal is available to Super Admin accounts only.'); return; }
+            if (session.role !== 'admin') { showUserError(L('msg_portal_admin_only')); return; }
             openModal('superAdminGlobalModal');
             await loadGlobalDatabaseOverview();
         }
@@ -2572,8 +2578,8 @@
             const fList = document.getElementById('globalFamiliesList');
             const lList = document.getElementById('globalAuditLogsList');
             const badge = document.getElementById('backendHealthBadge');
-            fList.innerHTML = 'Querying Firestore...';
-            lList.innerHTML = 'Loading audit logs...';
+            fList.innerHTML = L('admin_querying');
+            lList.innerHTML = L('admin_loading_logs');
 
             // S28: a stage tag tracked through the three reads — the health
             // badge could not express which read died; the report carries it.
@@ -2582,7 +2588,7 @@
                 const cfgRef = db.collection('global_config').doc('system_defaults');
                 const cfgDoc = await cfgRef.get();
                 badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold';
-                badge.innerText = 'Firestore R/W OK ✅';
+                badge.innerText = L('admin_health_ok');
 
                 const defTasks = (cfgDoc.exists && Array.isArray(cfgDoc.data().defaultTasks)) ? cfgDoc.data().defaultTasks : FALLBACK_DEFAULT_TASKS;
                 const defBuffer = (cfgDoc.exists && typeof cfgDoc.data().earlyBufferMinutes === 'number') ? cfgDoc.data().earlyBufferMinutes : 60;
@@ -2595,20 +2601,20 @@
                 memSnap.forEach(d => allRegisteredMembers.push({ id: d.id, ...d.data() }));
 
                 if (allRegisteredMembers.length === 0) {
-                    fList.innerHTML = `<p class="text-slate-400 text-center py-2">No users registered in families/default yet.</p>`;
+                    fList.innerHTML = `<p class="text-slate-400 text-center py-2">${L('admin_no_users')}</p>`;
                 } else {
                     fList.innerHTML = allRegisteredMembers.map(m => `
                         <div class="flex items-center justify-between bg-white border px-3 py-2 rounded-xl text-xs shadow-sm">
                             <div>
-                                <span class="font-bold text-slate-800">${esc(m.name || 'User')}</span>
+                                <span class="font-bold text-slate-800">${esc(m.name || L('default_display_name'))}</span>
                                 <span class="text-[10px] text-slate-400 ml-1">${esc(m.email || '')}</span>
-                                <div class="text-[9px] font-mono text-slate-400">UID: ${esc(m.id)}</div>
+                                <div class="text-[9px] font-mono text-slate-400">${L('admin_uid_line', {uid: esc(m.id)})}</div>
                             </div>
                             <div class="flex items-center space-x-1">
-                                <button data-action="impersonate-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || 'User')}" data-email="${esc(m.email || '')}" class="bg-amber-100 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded text-[10px] font-bold">
-                                    👑 Impersonate
+                                <button data-action="impersonate-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || L('default_display_name'))}" data-email="${esc(m.email || '')}" class="bg-amber-100 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded text-[10px] font-bold">
+                                    ${L('admin_impersonate')}
                                 </button>
-                                <button data-action="admin-delete-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || 'User')}" class="text-red-400 hover:text-red-600 px-1.5" title="Delete User Data">
+                                <button data-action="admin-delete-user" data-uid="${esc(m.id)}" data-name="${esc(m.name || L('default_display_name'))}" class="text-red-400 hover:text-red-600 px-1.5" title="${L('admin_delete_user_title')}">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             </div>
@@ -2620,13 +2626,13 @@
                 let logsArr = [];
                 logsSnap.forEach(d => logsArr.push(d.data()));
                 logsArr.sort((a, b) => ((b.timestamp && b.timestamp.seconds) || 0) - ((a.timestamp && a.timestamp.seconds) || 0));
-                lList.innerHTML = logsArr.map(l => `<div>[${esc(l.cycleId || '')}] <b>${esc(l.action)}</b> (${esc(l.user)}): ${esc(l.details)}</div>`).join('') || '<div>No audit logs yet.</div>';
+                lList.innerHTML = logsArr.map(l => `<div>[${esc(l.cycleId || '')}] <b>${esc(l.action)}</b> (${esc(l.user)}): ${esc(l.details)}</div>`).join('') || `<div>${L('admin_no_logs')}</div>`;
             } catch (e) {
                 reportError(e, { area: 'render', operation: 'admin-overview-load', stage: overviewStage, memberCount: allRegisteredMembers.length });
                 badge.className = 'text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold';
-                badge.innerText = 'Firestore Error ❌';
+                badge.innerText = L('admin_health_error');
                 logDebug(`Global overview error: ${e.message}`, true);
-                showUserError(friendlyError(e, 'The Global Directory could not be loaded.'));
+                showUserError(friendlyError(e, L('msg_directory_failed')));
             }
         }
 
@@ -2643,7 +2649,7 @@
                 if (!Array.isArray(parsed)) throw new Error('Default tasks must be a JSON array.');
                 earlyBufferMinutes = parseInt(document.getElementById('globalEarlyBufferInput').value, 10) || 60;
             } catch (e) {
-                alert('Invalid JSON in System Default Tasks: ' + e.message);
+                alert(L('alert_invalid_json', {message: e.message}));
                 return;
             }
             try {
@@ -2653,16 +2659,16 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 logDebug('Saved clean global_config/system_defaults to Firestore.');
-                alert('System Default Tasks & Buffer saved!');
+                alert(L('alert_config_saved'));
             } catch (e) {
                 reportError(e, { area: 'tasks', operation: 'admin-save-config', recovered: false, writeAmbiguous: true });
-                showUserError('Your settings could not be saved (the JSON was fine). Check your connection and try again.');
+                showUserError(L('msg_settings_save_failed'));
             }
         }
 
         async function adminDeleteSingleUser(uid, name) {
             if (isBlockedByImpersonationGuard('adminDeleteSingleUser')) return;
-            if (!confirm(`Delete all profile, tasks, and streak data for ${name} (${uid})?`)) return;
+            if (!confirm(L('confirm_delete_user', {name: name, uid: uid}))) return;
             // S30: this destructive action had NO try/catch at all — a
             // failure was total silence. The report carries target
             // task/completion COUNTS only, never the target's identity.
@@ -2688,13 +2694,13 @@
                 await loadGlobalDatabaseOverview();
             } catch (e) {
                 reportError(e, { area: 'auth', operation: 'admin-delete-user', recovered: false, writeAmbiguous: true, taskCount: taskCount, completionCount: completionCount });
-                showUserError('That user could not be deleted. Nothing was removed.');
+                showUserError(L('msg_delete_user_failed'));
             }
         }
 
         async function wipeAllDatabasesGlobal() {
             if (isBlockedByImpersonationGuard('wipeAllDatabasesGlobal')) return;
-            if (!confirm("🚨 DANGER: This will permanently wipe ALL users, tasks, streaks, completions, and audit logs in Firestore. Continue?")) return;
+            if (!confirm(L('confirm_nuke'))) return;
             logDebug("Initiating full Firestore database wipe...");
             // S31: progress counters so a partial wipe is describable at
             // the log — the report and the alert both carry the stop point.
@@ -2727,12 +2733,12 @@
                 for (const a of auditSnap.docs) { await a.ref.delete(); docsDeleted++; }
 
                 logDebug("All Firestore collections wiped clean.");
-                alert("All Firestore databases have been reset!");
+                alert(L('alert_wipe_done'));
                 await loadGlobalDatabaseOverview();
             } catch (e) {
                 reportError(e, { area: 'unknown', operation: 'admin-wipe-all', recovered: false, canContinue: false, familiesProcessed: familiesProcessed, docsDeleted: docsDeleted });
                 logDebug(`DB Wipe Error: ${e.message}`, true);
-                alert(`Error wiping DBs: stopped after ${familiesProcessed} families (${docsDeleted} documents deleted). ${e.message}`);
+                alert(L('alert_wipe_error', {families: familiesProcessed, docs: docsDeleted, message: e.message}));
             }
         }
 
@@ -2758,7 +2764,7 @@
                     return;
                 }
                 if (session.isImpersonating) {
-                    alert('Exit Impersonation first before signing out.');
+                    alert(L('alert_exit_impersonation_first'));
                     return;
                 }
                 localStorage.clear();
@@ -2828,9 +2834,9 @@
 
         function detectPlatform() {
             const ua = navigator.userAgent || '';
-            let p = "Desktop Browser"; let inst = "Click the install icon in your address bar to install.";
-            if (/android/i.test(ua)) { p = "Android Device"; inst = "Tap the 3-dot menu and select 'Add to Home screen'."; }
-            else if (/iPad|iPhone|iPod/.test(ua)) { p = "iPhone / iPad (iOS)"; inst = "Tap Share in Safari and select 'Add to Home Screen'."; }
+            let p = L('platform_desktop'); let inst = L('platform_desktop_instructions');
+            if (/android/i.test(ua)) { p = L('platform_android'); inst = L('platform_android_instructions'); }
+            else if (/iPad|iPhone|iPod/.test(ua)) { p = L('platform_ios'); inst = L('platform_ios_instructions'); }
             // Already running as the installed app? Then the install
             // instructions are noise — Andrew is past that step. Detect
             // standalone display mode (Android/desktop PWA), iOS's
@@ -2838,12 +2844,12 @@
             const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.referrer.startsWith('android-app://');
             const instEl = document.getElementById('platformInstallInstructions');
             if (isStandalone) {
-                p += " — Installed App";
-                instEl.innerText = "You're using the installed app.";
+                p += L('platform_installed_suffix');
+                instEl.innerText = L('platform_installed_instructions');
             } else {
                 instEl.innerText = inst;
             }
-            document.getElementById('detectedPlatformInfo').innerText = `Detected: ${p}`;
+            document.getElementById('detectedPlatformInfo').innerText = L('info_detected', {platform: p});
             // Re-check if the display mode changes while the page is open
             // (e.g. the app gets installed and relaunched in place).
             if (!detectPlatform._modeListener) {
@@ -2885,14 +2891,14 @@
             return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
         }
         async function testAlarmAlert() {
-            if (!("Notification" in window)) { alert("Notifications are not supported in this browser."); return; }
+            if (!("Notification" in window)) { alert(L('notif_unsupported')); return; }
             try {
                 const p = await Notification.requestPermission();
                 if (p === "granted") {
                     const now = new Date();
-                    await showAppNotification("🔔 Routine Alert", { body: "Notifications are active! Test fired at " + formatTestTime(now) + ".", tag: "routines-test-notification-" + now.getTime() });
+                    await showAppNotification(L('notif_title'), { body: L('notif_body', {time: formatTestTime(now)}), tag: "routines-test-notification-" + now.getTime() });
                 }
-                else alert("Permission denied.");
+                else alert(L('notif_permission_denied'));
             } catch (e) { reportError(e, { area: 'render', operation: 'notification-permission-test' }); }
         }
         // Delayed test: proves notifications land when Routines is NOT the
@@ -2901,20 +2907,20 @@
         // timer is a plain page setTimeout, so the app must stay alive in
         // the background during the wait — swiping it away kills the timer.
         async function testAlarmAlertDelayed() {
-            if (!("Notification" in window)) { alert("Notifications are not supported in this browser."); return; }
+            if (!("Notification" in window)) { alert(L('notif_unsupported')); return; }
             try {
                 const p = await Notification.requestPermission();
-                if (p !== "granted") { alert("Permission denied."); return; }
+                if (p !== "granted") { alert(L('notif_permission_denied')); return; }
                 const fireAt = new Date(Date.now() + 30000);
                 const statusEl = document.getElementById('notificationTestStatus');
                 if (statusEl) {
                     statusEl.classList.remove('hidden');
-                    statusEl.innerText = "Delayed test scheduled — it will fire at " + formatTestTime(fireAt) + " (in 30 seconds). Switch apps or lock your phone now. Keep Routines alive in the background — don't swipe it away, or the timer dies with it.";
+                    statusEl.innerText = L('notif_delayed_status', {time: formatTestTime(fireAt)});
                 }
                 setTimeout(async () => {
                     try {
                         const firedAt = new Date();
-                        await showAppNotification("🔔 Routine Alert (delayed test)", { body: "Delayed test fired at " + formatTestTime(firedAt) + ". Background notifications work!", tag: "routines-delayed-test-notification-" + firedAt.getTime() });
+                        await showAppNotification(L('notif_delayed_title'), { body: L('notif_delayed_body', {time: formatTestTime(firedAt)}), tag: "routines-delayed-test-notification-" + firedAt.getTime() });
                     } catch (e) { reportError(e, { area: 'render', operation: 'notification-delayed-test' }); }
                 }, 30000);
             } catch (e) { reportError(e, { area: 'render', operation: 'notification-delayed-test-schedule' }); }
@@ -2938,8 +2944,8 @@
         } catch (e) { /* registration is best-effort by design */ }
     })();
 </script>
-<div class="gtranslate_wrapper" style="position:fixed;right:12px;bottom:12px;z-index:9999;"></div>
-<script>window.gtranslateSettings = {"default_language":"en","detect_browser_language":true,"wrapper_selector":".gtranslate_wrapper"}</script>
-<script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
+<!-- Fleet minimum-version check (pattern 30, web-TWA expression). Renders nothing
+     unless the TWA wrapper reports a version below the fleet policy. -->
+<script src="version.js"></script>
 </body>
 </html>
