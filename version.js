@@ -36,12 +36,35 @@
  *     dismissible update prompt — the web expression of FLEXIBLE.
  *     Dismissal is remembered for this session only (keyed by the
  *     latest version), so the prompt re-offers on the next launch.
- *   - no wrapper version, or any fetch error: nothing shows.
+ *   - no wrapper version: the version UI stays inert (the notice
+ *     banner further down is separate — it applies however the app
+ *     was opened); every source failing: the check fails open.
  *
  * The user-facing strings in this module live in the base string file
  * (strings.js) per the fleet label model (pattern 29) — the label
  * foundation landed in the same R1 release, so this module carries no
  * label debt.
+ *
+ * R2 (Nov 17, 2026) — the emergency banner hook (pattern 31, web-shell
+ * expression) rides the SAME policy fetch: the Worker's payload
+ * carries "notice": {"id","text"} | null (per-app over fleet-wide).
+ * The notice TEXT is the one deliberate exception to the compiled-in
+ * label model — it renders exactly as served (via textContent, never
+ * markup). The banner shows when a notice is present and its id
+ * differs from the dismissed id persisted in localStorage; dismissing
+ * stores the id. Unlike the version gate — which stays inert without
+ * a wrapper version, there being nothing for Play to update — the
+ * banner is for the app's users however the app was opened, so the
+ * policy fetch now happens on every open; the version UI still only
+ * engages when a wrapper version is known. Fallback legs carry no
+ * notice for this app: the fleet Remote Config mirror writes no
+ * routines notice params (its NOTICE_RC_KEYS cover fleet / bridge /
+ * homehelper), so when the Worker is unreachable the last-known
+ * notice rides the policy cache; a Worker answer — including
+ * notice: null — is authoritative and replaces the cached notice.
+ * Any failure fails open: no banner, no block. The banner's one
+ * chrome string ("Dismiss") is the strings.js key "dismiss", shared
+ * with the update prompt.
  *
  * Recorded limitation: wrapper vc1 (1.0.0) cannot report a version, so
  * enforcement binds only wrappers >= vc2; vc1 and browser opens fail
@@ -72,6 +95,13 @@
   var VC_SESSION_KEY = "rs_twa_vc";
   var VC_LOCAL_KEY = "rs_twa_vc_last";
   var DISMISS_KEY = "rs-update-dismissed-latest";
+  var NOTICE_DISMISS_KEY = "rs-notice-dismissed-id";
+
+  // Set by the Worker leg when it answers: the notice it carried
+  // (possibly null — an authoritative "no notice"). Stays undefined
+  // when the Worker leg never answered, which is how check() knows
+  // to fall back to the cached notice.
+  var workerNotice;
 
   function readWrapperVersion() {
     var params;
@@ -132,20 +162,59 @@
     });
   }
 
-  function readCachedPolicy() {
+  function readCacheRaw() {
     try {
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var p = JSON.parse(raw);
-      return p ? sanePolicy(p.min, p.latest) : null;
+      return p && typeof p === "object" ? p : null;
     } catch (_) {}
     return null;
   }
 
-  function writeCachedPolicy(policy) {
+  function writeCacheRaw(p) {
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(policy));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(p));
     } catch (_) {}
+  }
+
+  function readCachedPolicy() {
+    var p = readCacheRaw();
+    return p ? sanePolicy(p.min, p.latest) : null;
+  }
+
+  function writeCachedPolicy(policy) {
+    // Preserve the cached notice (below): a policy refresh must not
+    // erase the last-known notice as a side effect.
+    var p = readCacheRaw() || {};
+    p.min = policy.min;
+    p.latest = policy.latest;
+    writeCacheRaw(p);
+  }
+
+  /* The notice pair, validated the same way wherever it comes from:
+   * a usable notice has a non-empty string id and non-empty string
+   * text. Anything else is "no notice". */
+  function saneNotice(n) {
+    if (!n || typeof n !== "object") return null;
+    if (typeof n.id !== "string" || !n.id) return null;
+    if (typeof n.text !== "string" || !n.text) return null;
+    return { id: n.id, text: n.text };
+  }
+
+  function readCachedNotice() {
+    var p = readCacheRaw();
+    return p ? saneNotice(p.notice) : null;
+  }
+
+  function writeCachedNotice(notice) {
+    var p = readCacheRaw() || {};
+    p.notice = notice;
+    writeCacheRaw(p);
+  }
+
+  function currentNotice() {
+    return workerNotice !== undefined ? workerNotice : readCachedNotice();
   }
 
   // A usable policy names real builds: both codes are safe integers,
@@ -171,6 +240,11 @@
         if (!data || !data.ok) throw new Error("bad payload");
         var policy = sanePolicy(Number(data.min_version_code), Number(data.latest_version_code));
         if (!policy) throw new Error("bad version codes");
+        // The notice rides this same payload. Captured only on a
+        // usable Worker answer, and cached with it — a Worker answer
+        // (including notice: null) is the authoritative notice state.
+        workerNotice = saneNotice(data.notice);
+        writeCachedNotice(workerNotice);
         return policy;
       });
   }
@@ -313,14 +387,74 @@
     document.body.appendChild(overlay);
   }
 
+  /* --- UI: the operator notice banner (pattern 31) ----------------- */
+  function ensureNoticeStyle() {
+    if (document.getElementById("rs-notice-style")) return;
+    var style = document.createElement("style");
+    style.id = "rs-notice-style";
+    style.textContent =
+      ".rs-notice-bar{position:fixed;top:0;left:0;right:0;z-index:9998;background:#8c2b1d;color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.45;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.25);}" +
+      ".rs-notice-text{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;}" +
+      ".rs-notice-dismiss{flex:0 0 auto;font:inherit;font-size:14px;padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;cursor:pointer;}";
+    document.head.appendChild(style);
+  }
+
+  function showNotice(notice) {
+    if (!notice) return;
+    if (document.getElementById("rs-notice-bar")) return;
+    var dismissed = null;
+    try {
+      dismissed = localStorage.getItem(NOTICE_DISMISS_KEY);
+    } catch (_) {}
+    if (dismissed === notice.id) return;
+    ensureNoticeStyle();
+    var bar = document.createElement("div");
+    bar.className = "rs-notice-bar";
+    bar.id = "rs-notice-bar";
+    bar.setAttribute("role", "alert");
+    var text = document.createElement("div");
+    text.className = "rs-notice-text";
+    // The notice text renders exactly as the operator served it —
+    // as text, never as markup.
+    text.textContent = notice.text;
+    var dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "rs-notice-dismiss";
+    dismiss.textContent = T("dismiss");
+    dismiss.addEventListener("click", function () {
+      try {
+        localStorage.setItem(NOTICE_DISMISS_KEY, notice.id);
+      } catch (_) {}
+      bar.remove();
+      try {
+        document.body.style.paddingTop = "";
+      } catch (_) {}
+    });
+    bar.appendChild(text);
+    bar.appendChild(dismiss);
+    document.body.appendChild(bar);
+    // Keep the app's own top chrome reachable under the fixed bar.
+    try {
+      document.body.style.paddingTop = bar.offsetHeight + "px";
+    } catch (_) {}
+  }
+
   function check() {
     var vc = readWrapperVersion();
-    if (vc == null) return; // browser/PWA open: inert by design
     resolvePolicy()
       .then(function (policy) {
-        if (!policy) return;
-        if (vc < policy.min) showBlockingUpdate();
-        else if (vc < policy.latest) showUpdatePrompt(policy.latest);
+        // The version UI engages only when a wrapper version is
+        // known — a plain browser/PWA open has nothing for Play to
+        // update, so that half stays inert there (unchanged from R1).
+        if (vc != null && policy) {
+          if (vc < policy.min) showBlockingUpdate();
+          else if (vc < policy.latest) showUpdatePrompt(policy.latest);
+        }
+        // The notice banner is for the app's users however the app
+        // was opened; it rides the same fetch and fails open. When
+        // every source failed, currentNotice() is the cached notice
+        // or null — null shows nothing.
+        showNotice(currentNotice());
       })
       .catch(function () { /* fail open — never block boot */ });
   }
