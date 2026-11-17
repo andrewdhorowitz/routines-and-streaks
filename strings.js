@@ -65,7 +65,7 @@
     "sign_in": "Sign in",
 
     /* ---- auth / welcome ---- */
-    "auth_welcome_title": "Welcome to Routines Clarity",
+    "auth_welcome_title": "Welcome to Routines & Streaks",
     "auth_subtitle": "Sign in with Google to track your evening-to-morning routine cycle and build daily streaks.",
     "auth_continue_google": "Continue with Google",
     "auth_or": "or",
@@ -131,7 +131,7 @@
     "platform_installed_instructions": "You're using the installed app.",
 
     /* ---- footer ---- */
-    "footer_line_start": "© 2026 Andrew Horowitz · Routines Clarity",
+    "footer_line_start": "© 2026 Andrew Horowitz · Routines & Streaks",
     "footer_line_end": "· Built with Muse ·",
     "footer_privacy": "Privacy",
 

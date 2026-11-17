@@ -300,7 +300,7 @@
     var style = document.createElement("style");
     style.id = "rs-version-style";
     style.textContent =
-      ".rs-update-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:24px;box-sizing:border-box;}" +
+      ".rs-update-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:24px 24px calc(24px + env(safe-area-inset-bottom, 0px));box-sizing:border-box;}" +
       ".rs-update-card{max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 24px;text-align:center;font-family:inherit;}" +
       ".rs-update-card h2{margin:0 0 8px;font-size:20px;}" +
       ".rs-update-card p{margin:0 0 16px;color:#444;line-height:1.5;}" +

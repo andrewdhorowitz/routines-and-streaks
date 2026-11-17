@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Routines Clarity</title>
+    <title>Routines & Streaks</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
@@ -66,6 +66,18 @@
             box-shadow: none !important;
         }
     </style>
+    <!-- Bottom safe-area inset (pattern 28, web-shell expression; fleet R3):
+         the designed bottom spacing stays exactly as designed, and the
+         device's true bottom inset is ADDED on top, so content always
+         clears the system navigation / gesture area in the TWA and on
+         notched devices. env() resolves to 0 where a browser reports no
+         inset. (The body's 11rem replaces the former fixed pb-44 class:
+         same designed clearance, plus the inset.) -->
+    <style>
+        body { padding-bottom: calc(11rem + env(safe-area-inset-bottom, 0px)); }
+        .fixed.inset-0 { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
+        #debugConsole { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
+    </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -75,7 +87,7 @@
          window.L exists before every body script; static copy binds at DOMContentLoaded. -->
     <script src="strings.js"></script>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800 pb-44">
+<body class="bg-slate-50 min-h-screen text-slate-800">
 
     <!-- Active In-Place Impersonation Banner -->
     <div id="impersonationBanner" class="bg-amber-600 text-white px-4 py-2 text-xs font-bold text-center flex justify-between items-center shadow-md hidden z-50 sticky top-0">
@@ -87,7 +99,7 @@
     <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 shadow-sm">
         <div class="max-w-md mx-auto flex justify-between items-center">
             <div>
-                <h1 class="text-xl font-bold text-slate-900" id="userNameDisplay">Routines Clarity</h1>
+                <h1 class="text-xl font-bold text-slate-900" id="userNameDisplay">Routines & Streaks</h1>
                 <p class="text-xs text-slate-500"><i class="fa-solid fa-user-tag text-[10px] mr-1"></i><span id="userRoleBadge" data-i18n="role_not_signed_in">Not Signed In</span></p>
             </div>
             <div class="flex items-center space-x-1.5">
@@ -116,7 +128,7 @@
         <!-- Onboarding / Auth Section (Phase 1: Google Sign-In Only + Welcome Provisioning) -->
         <div id="authSection" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
             <div id="googleSignInView" class="space-y-4">
-                <h2 class="text-xl font-bold text-slate-900 text-center" data-i18n="auth_welcome_title">Welcome to Routines Clarity</h2>
+                <h2 class="text-xl font-bold text-slate-900 text-center" data-i18n="auth_welcome_title">Welcome to Routines & Streaks</h2>
                 <p class="text-xs text-slate-500 text-center" id="authSubtitle" data-i18n="auth_subtitle">Sign in with Google to track your evening-to-morning routine cycle and build daily streaks.</p>
                 <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
                     <i class="fa-brands fa-google text-red-400 text-base"></i>
@@ -247,7 +259,7 @@
     </main>
 
     <footer class="max-w-md mx-auto px-4 pb-8 text-center">
-        <p class="text-xs text-slate-500"><span data-i18n="footer_line_start">© 2026 Andrew Horowitz · Routines Clarity</span> <span id="appVersion">V1</span> <span data-i18n="footer_line_end">· Built with Muse ·</span> <a href="https://andrewdhorowitz.com/privacy" data-i18n="footer_privacy" class="underline inline-block py-1">Privacy</a></p>
+        <p class="text-xs text-slate-500"><span data-i18n="footer_line_start">© 2026 Andrew Horowitz · Routines & Streaks</span> <span id="appVersion">V1</span> <span data-i18n="footer_line_end">· Built with Muse ·</span> <a href="https://andrewdhorowitz.com/privacy" data-i18n="footer_privacy" class="underline inline-block py-1">Privacy</a></p>
     </footer>
     <script>
         const APP_VERSION = "V1";
@@ -1270,7 +1282,7 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
-        logDebug('Booting Routines Clarity Phase 1 (Solo Mode)...');
+        logDebug('Booting Routines & Streaks Phase 1 (Solo Mode)...');
         drainBootStash();
 
         let session = {
@@ -1832,7 +1844,7 @@
                 document.getElementById('tabInfo').classList.add('hidden');
                 document.getElementById('navTabs').classList.add('hidden');
                 superAdminContainer.classList.add('hidden');
-                document.getElementById('userNameDisplay').innerText = 'Routines Clarity';
+                document.getElementById('userNameDisplay').innerText = 'Routines & Streaks';
                 document.getElementById('userRoleBadge').innerText = L('role_not_signed_in');
                 return;
             }

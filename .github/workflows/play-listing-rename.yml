@@ -1,9 +1,9 @@
-name: Play listing rename (Routines Clarity)
+name: Play listing rename (Routines & Streaks)
 
 # One-off, single-purpose workflow (manual dispatch only).
 # Renames the Play store listing title for
-# com.andrewdhorowitz.routinesandstreaks from "Routines & Streaks" to
-# "Routines Clarity", authenticating with the play-publisher service
+# com.andrewdhorowitz.routinesandstreaks from "Routines Clarity" to
+# "Routines & Streaks", authenticating with the play-publisher service
 # account (PLAY_SERVICE_ACCOUNT_JSON), which holds store-presence
 # rights. The play-api SA cannot commit listing edits (403), so this
 # runs with play-publisher instead. Full outcome (HTTP statuses,
@@ -46,8 +46,8 @@ jobs:
           from google.oauth2 import service_account
 
           PACKAGE = "com.andrewdhorowitz.routinesandstreaks"
-          OLD_TITLE = "Routines & Streaks"
-          NEW_TITLE = "Routines Clarity"
+          OLD_TITLE = "Routines Clarity"
+          NEW_TITLE = "Routines & Streaks"
           LANGUAGE = "en-US"
           BASE = "https://androidpublisher.googleapis.com/androidpublisher/v3"
           RESULTS_PATH = "play-listing/results.json"
