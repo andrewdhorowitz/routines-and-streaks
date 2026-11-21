@@ -86,6 +86,10 @@
     <!-- Fleet label model (pattern 29): the ONE base string file. Loaded in head so
          window.L exists before every body script; static copy binds at DOMContentLoaded. -->
     <script src="strings.js"></script>
+    <!-- Public gate (§13): the auth cache + pure staleness/checkpoint
+         decisions. Loaded in head so window.RSGate exists before the
+         body script's auth handler runs. -->
+    <script src="gate.js"></script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
@@ -149,6 +153,24 @@
                         <i class="fa-solid fa-shield-halved mr-1"></i> <span data-i18n="auth_super_admin_sign_in">Super Admin Sign-In</span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Public gate (§13, Nov 21 2026): the re-auth view.
+                 Shown only when a session exists AND the on-device
+                 sign-in cache is stale (new calendar day or past
+                 the 6-hour public timeout). Its button is the only
+                 way the re-auth prompt is ever raised —
+                 tap-to-start, into the app's existing sign-in flow;
+                 a pass re-runs the standing checks (the rule-9
+                 checkpoint) and refreshes the cache. -->
+            <div id="reauthView" class="space-y-4 hidden">
+                <h2 class="text-xl font-bold text-slate-900 text-center" data-i18n="auth_reauth_title">Confirm it's still you</h2>
+                <p class="text-xs text-slate-500 text-center" data-i18n="auth_reauth_body">It's been a while since you signed in on this device. Confirm it's still you to keep going — it takes a moment, and nothing about your routines changes.</p>
+                <button type="button" data-action="google-sign-in" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl text-xs font-bold shadow flex items-center justify-center space-x-2">
+                    <i class="fa-brands fa-google text-red-400 text-base"></i>
+                    <span data-i18n="auth_reauth_button">Confirm with Google</span>
+                </button>
+                <button type="button" data-action="sign-out" class="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 py-3 rounded-xl text-xs font-bold shadow-sm" data-i18n="auth_reauth_signout">Sign out instead</button>
             </div>
 
             <!-- First-Time Welcome / Profile Confirmation Screen -->
@@ -1502,6 +1524,18 @@
         // the same one the inner catch uses.
         let authPhase = 'registry-check';
         let roleResolution = 'user';
+        /* Public gate (§13, Nov 21 2026): set when this page load
+         * weighed a stale cache and showed the re-auth view. The
+         * view's Confirm button runs the existing sign-in flow;
+         * when the resulting session's standing checks complete
+         * (the registry read + profile load below — the rule-9
+         * checkpoint), the cache refreshes. A failed load is
+         * indeterminate — a pass: the existing error banner runs
+         * and the cache is left exactly as it was. Sign-out (the
+         * handler below) clears the cache; a null user from the
+         * SDK (including Firebase's own sign-out of a disabled or
+         * deleted account — the definitive answer) clears it too. */
+        let gateReauthPending = false;
         auth.onAuthStateChanged(async user => {
             authPhase = 'registry-check';
             try {
@@ -1516,11 +1550,42 @@
             teardownUserListeners();
             if (!user) {
                 if (demoMode) { renderAppState(); return; }
+                /* §13 rule 4: no session, no cache. (Also the
+                 * landing spot when Firebase itself signs a
+                 * disabled/deleted account out — rules 7 + 9's
+                 * definitive answer.) */
+                if (window.RSGate) RSGate.clear();
+                gateReauthPending = false;
                 session = { uid: '', email: '', userName: '', role: 'new', earlyBuffer: 60, currentStreak: 0, longestStreak: 0, totalCompletedCycles: 0, isImpersonating: false, originalAdminSession: null };
                 document.getElementById('debugConsole').style.display = 'none';
                 logDebug('No signed-in user. Showing Google Sign-In screen.');
                 renderAppState();
                 return;
+            }
+
+            /* §13 rules 2–3: weigh the auth cache ONCE at this
+             * (re)start. Fresh → the cache records this
+             * confirmation and the load proceeds silently. Stale
+             * (or no cache yet) → show the re-auth view and wait:
+             * the standing checks below do NOT run until the user
+             * taps Confirm and signs in again. Nothing is signed
+             * out — staleness is not revocation — and the ask is
+             * raised only here, never mid-session. Demo mode never
+             * reaches this handler with a user. */
+            if (window.RSGate && !gateReauthPending) {
+                const cached = RSGate.read();
+                const fresh = cached && cached.account === (user.email || '')
+                    && RSGate.isFresh(cached.account, cached.authedAt, Date.now());
+                if (fresh) {
+                    RSGate.recordAuth(user.email || '', Date.now());
+                } else {
+                    gateReauthPending = true;
+                    document.getElementById('authSection').classList.remove('hidden');
+                    document.getElementById('googleSignInView').classList.add('hidden');
+                    document.getElementById('welcomeProvisionView').classList.add('hidden');
+                    document.getElementById('reauthView').classList.remove('hidden');
+                    return;
+                }
             }
 
             logDebug('Auth state active.');
@@ -1599,6 +1664,14 @@
                         }
                     }
                     logUsage('Super Admin Login', user.email);
+                    /* §13 rule 9: standing confirmed (registry +
+                     * profile) — a re-auth checkpoint completes
+                     * here and the cache refreshes. */
+                    if (window.RSGate && gateReauthPending) {
+                        gateReauthPending = false;
+                        document.getElementById('reauthView').classList.add('hidden');
+                        RSGate.recordAuth(user.email || '', Date.now());
+                    }
                     authPhase = 'render';
                     renderAppState();
                     return;
@@ -1621,6 +1694,14 @@
                     } catch (e) {
                         reportError(e, { area: 'auth', operation: 'lastactive-sync', recovered: false });
                         throw e;
+                    }
+                    /* §13 rule 9: standing confirmed (profile
+                     * loaded) — a re-auth checkpoint completes
+                     * here and the cache refreshes. */
+                    if (window.RSGate && gateReauthPending) {
+                        gateReauthPending = false;
+                        document.getElementById('reauthView').classList.add('hidden');
+                        RSGate.recordAuth(user.email || '', Date.now());
                     }
                     authPhase = 'render';
                     renderAppState();
@@ -1714,6 +1795,10 @@
                 await provisionUserBatch(uid, confirmedName, user.email || '', 'user');
                 session.userName = confirmedName;
                 session.role = 'user';
+                /* §13: a completed provisioning IS this app's
+                 * standing for a first-time account — record the
+                 * confirmed sign-in so the cache starts here. */
+                if (window.RSGate) RSGate.recordAuth(user.email || '', Date.now());
                 logDebug('Provisioning complete.');
                 logUsage('User Provisioned', `${confirmedName} (${uid})`);
                 renderAppState();

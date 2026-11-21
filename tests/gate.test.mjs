@@ -1,0 +1,20 @@
+/* Public gate (§13) pure-logic tests — run: node tests/gate.test.mjs */
+import assert from "node:assert";
+const Gate = (await import("../gate.js")).default;
+const H = 60 * 60 * 1000;
+const t0 = new Date(2026, 10, 20, 9, 0, 0).getTime();
+assert.equal(Gate.SECURITY_TIMEOUT_MS, 6 * H, "public cap is 6 hours");
+assert.equal(Gate.isFresh("a@b.c", t0, t0 + 2 * H), true, "fresh within timeout, same day");
+assert.equal(Gate.isFresh("a@b.c", t0, t0 + 6 * H), true, "exactly at 6h still fresh");
+assert.equal(Gate.isFresh("a@b.c", t0, t0 + 6 * H + 1), false, "past 6h is stale");
+const late = new Date(2026, 10, 20, 23, 30, 0).getTime();
+const afterMidnight = new Date(2026, 10, 21, 0, 30, 0).getTime();
+assert.equal(Gate.isFresh("a@b.c", late, afterMidnight), false, "new calendar day is stale");
+assert.equal(Gate.isFresh("", t0, t0), false, "no account is never fresh");
+assert.equal(Gate.isFresh("a@b.c", 0, t0), false, "no timestamp is never fresh");
+assert.equal(Gate.checkpointVerdict("standing"), "standing");
+assert.equal(Gate.checkpointVerdict("account-revoked"), "revoked");
+assert.equal(Gate.checkpointVerdict("offline"), "indeterminate", "transient failure is a pass");
+assert.equal(Gate.checkpointVerdict("profile-load-failed"), "indeterminate");
+assert.equal(Gate.checkpointVerdict(undefined), "indeterminate");
+console.log("gate tests: OK");
