@@ -84,7 +84,7 @@ jobs:
         with:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar
-          retention-days: 1
+          retention-days: 4
 
       - name: Deploy to GitHub Pages
         id: deployment
